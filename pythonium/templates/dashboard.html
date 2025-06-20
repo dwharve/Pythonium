@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pythonium Code Health Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary-color: #6366f1;
+            --primary-dark: #4f46e5;
+            --error-color: #ef4444;
+            --warning-color: #f59e0b;
+            --info-color: #3b82f6;
+            --success-color: #10b981;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+        
+        .loading {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 60px 0;
+            margin-bottom: 40px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)" /></svg>');
+            opacity: 0.3;
+        }
+        
+        .header-content {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .header .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            font-weight: 400;
+        }
+        
+        .header .timestamp {
+            font-size: 0.95rem;
+            opacity: 0.8;
+            margin-top: 10px;
+        }
+        
+        .dashboard-nav {
+            background: var(--card-bg);
+            padding: 20px 0;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .nav-items {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .nav-item {
+            padding: 10px 20px;
+            background: transparent;
+            border: 2px solid var(--primary-color);
+            color: var(--primary-color);
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-item:hover, .nav-item.active {
+            background: var(--primary-color);
+            color: white;
+            transform: translateY(-2px);
+        }
+        
+        .section {
+            margin-bottom: 50px;
+            scroll-margin-top: 120px;
+        }
+        
+        .section-title {
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 25px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 30px;
+            background: var(--primary-color);
+            border-radius: 2px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        
+        .stat-card {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-color), var(--primary-dark));
+        }
+        
+        .stat-number {
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-description {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: 8px;
+            line-height: 1.4;
+        }
+        
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .chart-container {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            transition: all 0.3s ease;
+        }
+        
+        .chart-container:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .chart-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 25px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .chart-title::before {
+            content: '📊';
+            font-size: 1.2rem;
+        }
+        
+        .treemap-container {
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            padding: 30px;
+            margin-bottom: 40px;
+        }
+        
+        #treemap {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 20px;
+            min-height: 400px;
+            position: relative;
+        }
+        
+        .treemap-block {
+            position: absolute;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: white;
+            font-weight: 500;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .treemap-block:hover {
+            transform: scale(1.05);
+            z-index: 10;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+        }
+        
+        .file-list {
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+        
+        .file-list-title {
+            padding: 25px 30px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        }
+        
+        .file-item {
+            padding: 25px 30px;
+            border-bottom: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        
+        .file-item:hover {
+            background: #f8fafc;
+            transform: translateX(5px);
+        }
+        
+        .file-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .file-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .file-metrics {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .metric-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: white;
+        }
+        
+        .metric-badge.error { background: var(--error-color); }
+        .metric-badge.warn { background: var(--warning-color); }
+        .metric-badge.info { background: var(--info-color); }
+        
+        .file-issues {
+            display: none;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .file-issues.show {
+            display: block;
+        }
+        
+        .issue-item {
+            background: #f8fafc;
+            border-left: 4px solid var(--primary-color);
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .issue-item.error { border-left-color: var(--error-color); }
+        .issue-item.warn { border-left-color: var(--warning-color); }
+        .issue-item.info { border-left-color: var(--info-color); }
+        
+        .issue-header {
+            display: flex;
+            justify-content: between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+        
+        .issue-severity {
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 0.5px;
+        }
+        
+        .issue-severity.error { color: var(--error-color); }
+        .issue-severity.warn { color: var(--warning-color); }
+        .issue-severity.info { color: var(--info-color); }
+        
+        .issue-location {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .issue-message {
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        
+        .issue-detector {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-style: italic;
+        }
+        
+        .filters {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            margin-bottom: 30px;
+        }
+        
+        .filter-group {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .filter-label {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        
+        .filter-select {
+            padding: 8px 15px;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            background: white;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+        
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+        
+        .severity-error { color: var(--error-color); }
+        .severity-warn { color: var(--warning-color); }
+        .severity-info { color: var(--info-color); }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            pointer-events: none;
+            z-index: 1000;
+            white-space: nowrap;
+        }
+        
+        .file-issues-explorer,
+        .detector-issues-explorer,
+        .severity-issues-explorer {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            background: #fafbfc;
+        }
+        
+        .file-group {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 15px;
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        .issue-detail {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid var(--primary-color);
+            line-height: 1.6;
+        }
+        
+        .issue-detail strong {
+            color: var(--text-primary);
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 15px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .chart-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            }
+            
+            .nav-items {
+                gap: 15px;
+            }
+            
+            .nav-item {
+                padding: 8px 15px;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading">
+        <div class="spinner"></div>
+    </div>
+    
+    <div class="header">
+        <div class="container">
+            <div class="header-content">
+                <h1>🔍 Pythonium Code Health Dashboard</h1>
+                <div class="subtitle">Comprehensive Code Quality Analysis Report</div>
+                <div class="timestamp">Generated on ${timestamp}</div>
+            </div>
+        </div>
+    </div>
+    
+    <nav class="dashboard-nav">
+        <div class="container">
+            <div class="nav-items">
+                <a href="#overview" class="nav-item active">📊 Overview</a>
+                <a href="#charts" class="nav-item">📈 Analytics</a>
+                <a href="#files" class="nav-item">📁 File Details</a>
+                <a href="#issues" class="nav-item">🐛 Issue Explorer</a>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <section id="overview" class="section">
+            <h2 class="section-title">Executive Summary</h2>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">${total_issues}</div>
+                    <div class="stat-label">Total Issues Found</div>
+                    <div class="stat-description">Code health issues across your entire codebase</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${files_affected}</div>
+                    <div class="stat-label">Files Affected</div>
+                    <div class="stat-description">Source files containing one or more issues</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${error_count}</div>
+                    <div class="stat-label">Critical Errors</div>
+                    <div class="stat-description">High-priority issues requiring immediate attention</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${warn_count}</div>
+                    <div class="stat-label">Warnings</div>
+                    <div class="stat-description">Medium-priority improvements and potential issues</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">$info_count</div>
+                    <div class="stat-label">Suggestions</div>
+                    <div class="stat-description">Code optimization and best practice recommendations</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">$detector_count</div>
+                    <div class="stat-label">Detectors Run</div>
+                    <div class="stat-description">Analysis engines used to evaluate your code</div>
+                </div>
+            </div>
+        </section>
+        
+        <section id="charts" class="section">
+            <h2 class="section-title">Detailed Analytics</h2>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <h3 class="chart-title">Issues by Severity Level</h3>
+                    <canvas id="severityChart" width="400" height="300"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3 class="chart-title">Detection Sources</h3>
+                    <canvas id="detectorChart" width="400" height="300"></canvas>
+                </div>
+            </div>
+            
+            <div class="treemap-container">
+                <h3 class="chart-title">File Impact Visualization</h3>
+                <div id="treemap"></div>
+            </div>
+        </section>
+        
+        <section id="files" class="section">
+            <h2 class="section-title">File Analysis</h2>
+            
+            <div class="filters">
+                <div class="filter-group">
+                    <span class="filter-label">Filter by:</span>
+                    <select id="severityFilter" class="filter-select">
+                        <option value="all">All Severities</option>
+                        <option value="error">Errors Only</option>
+                        <option value="warn">Warnings Only</option>
+                        <option value="info">Info Only</option>
+                    </select>
+                    <select id="detectorFilter" class="filter-select">
+                        <option value="all">All Detectors</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="file-list">
+                <div class="file-list-title">
+                    📁 Files with Issues (Click to expand details)
+                </div>
+                ${file_list_html}
+            </div>
+        </section>
+        
+        <section id="issues" class="section">
+            <h2 class="section-title">Issue Explorer</h2>
+            <div id="issue-summary" class="chart-container">
+                <p>Click on charts or files above to explore specific issues in detail.</p>
+            </div>
+        </section>
+    </div>
+    <script>
+        // Dashboard data and state management
+        const dashboardData = $data_json;
+        let currentFilter = { severity: 'all', detector: 'all' };
+        let chartInstances = {};
+        
+        // Utility functions
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleDateString() + ' at ' + date.toLocaleTimeString();
+        }
+        
+        function getSeverityColor(severity) {
+            const colors = {
+                'error': '#ef4444',
+                'warn': '#f59e0b', 
+                'info': '#3b82f6',
+                'warning': '#f59e0b'
+            };
+            return colors[severity.toLowerCase()] || '#64748b';
+        }
+        
+        function getDetectorColors() {
+            const colors = [
+                '#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b',
+                '#ef4444', '#84cc16', '#f97316', '#ec4899', '#14b8a6',
+                '#8b5cf6', '#06b6d4'
+            ];
+            return colors;
+        }
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCharts();
+            initializeTreemap();
+            initializeFilters();
+            initializeNavigation();
+            initializeFileInteraction();
+            
+            // Hide loading
+            document.querySelector('.loading').style.display = 'none';
+        });
+        
+        // Chart initialization
+        function initializeCharts() {
+            createSeverityChart();
+            createDetectorChart();
+        }
+        
+        function createSeverityChart() {
+            const ctx = document.getElementById('severityChart').getContext('2d');
+            const severityData = dashboardData.summary?.severity_counts || {};
+            
+            chartInstances.severity = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(severityData).map(s => s.charAt(0).toUpperCase() + s.slice(1)),
+                    datasets: [{
+                        data: Object.values(severityData),
+                        backgroundColor: Object.keys(severityData).map(getSeverityColor),
+                        borderWidth: 3,
+                        borderColor: '#ffffff',
+                        hoverBorderWidth: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                usePointStyle: true,
+                                font: {
+                                    size: 12,
+                                    weight: '500'
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((context.parsed / total) * 100).toFixed(1);
+                                    return context.label + ': ' + context.parsed + ' (' + percentage + '%)';
+                                }
+                            }
+                        }
+                    },
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const severity = Object.keys(severityData)[index];
+                            filterBySeverity(severity);
+                            showSeverityIssues(severity);
+                        }
+                    }
+                }
+            });
+        }
+        
+        function createDetectorChart() {
+            const ctx = document.getElementById('detectorChart').getContext('2d');
+            const detectorData = dashboardData.summary?.detector_counts || {};
+            const colors = getDetectorColors();
+            
+            chartInstances.detector = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(detectorData).map(d => d.replace('_', ' ')),
+                    datasets: [{
+                        label: 'Issues Found',
+                        data: Object.values(detectorData),
+                        backgroundColor: colors.slice(0, Object.keys(detectorData).length),
+                        borderColor: colors.slice(0, Object.keys(detectorData).length),
+                        borderWidth: 2,
+                        borderRadius: 8,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    return context[0].label.replace('_', ' ').toUpperCase();
+                                },
+                                label: function(context) {
+                                    return 'Issues: ' + context.parsed.y;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1,
+                                font: {
+                                    size: 11
+                                }
+                            },
+                            grid: {
+                                color: '#f1f5f9'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                font: {
+                                    size: 10
+                                }
+                            },
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const detector = Object.keys(detectorData)[index];
+                            filterByDetector(detector);
+                            showDetectorIssues(detector);
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Enhanced treemap with proper sizing and coloring
+        function initializeTreemap() {
+            const treemapContainer = document.getElementById('treemap');
+            const files = dashboardData.files || [];
+            
+            if (files.length === 0) {
+                treemapContainer.innerHTML = '<div style="text-align: center; padding: 50px; color: #64748b;">No files with issues found.</div>';
+                return;
+            }
+            
+            // Sort files by issue count for better visualization
+            const sortedFiles = files.sort((a, b) => b.size - a.size);
+            const maxIssues = Math.max(...files.map(f => f.size));
+            
+            treemapContainer.innerHTML = '';
+            
+            // Calculate container dimensions
+            const containerWidth = treemapContainer.clientWidth || 800;
+            const minBlockSize = 80;
+            const maxBlockSize = 180;
+            const padding = 15;
+            const blocksPerRow = Math.floor(containerWidth / (maxBlockSize + padding));
+            
+            sortedFiles.forEach((file, index) => {
+                const block = document.createElement('div');
+                block.className = 'treemap-block';
+                
+                // Calculate proportional size (minimum 80px, maximum 180px)
+                const proportion = file.size / maxIssues;
+                const size = Math.max(minBlockSize, Math.min(maxBlockSize, minBlockSize + (proportion * (maxBlockSize - minBlockSize))));
+                
+                // Color based on issue severity
+                const severityScore = calculateSeverityScore(file);
+                const color = getSeverityColorByScore(severityScore);
+                
+                // Position blocks in a proper grid layout with adequate spacing
+                const col = index % blocksPerRow;
+                const row = Math.floor(index / blocksPerRow);
+                const x = col * (maxBlockSize + padding) + padding;
+                const y = row * (maxBlockSize + padding) + padding;
+                
+                block.style.left = x + 'px';
+                block.style.top = y + 'px';
+                block.style.width = size + 'px';
+                block.style.height = size + 'px';
+                block.style.backgroundColor = color;
+                
+                const fileName = file.name.length > 15 ? file.name.substring(0, 12) + '...' : file.name;
+                block.innerHTML = 
+                    '<div style="font-weight: 600; font-size: 0.9rem;">' + fileName + '</div>' +
+                    '<div style="font-size: 0.8rem; opacity: 0.9;">' + file.size + ' issues</div>';
+                
+                // Add click handler for both scrolling to file and showing issue details
+                block.addEventListener('click', () => {
+                    scrollToFile(file.name);
+                    showFileIssues(file);
+                });
+                
+                // Add tooltip
+                block.title = file.name + ': ' + file.size + ' issues';
+                
+                treemapContainer.appendChild(block);
+            });
+            
+            // Set container height based on content
+            const rows = Math.ceil(sortedFiles.length / blocksPerRow);
+            treemapContainer.style.height = Math.max(400, rows * (maxBlockSize + padding) + padding * 2) + 'px';
+        }
+        
+        function calculateSeverityScore(file) {
+            // Simple scoring: error=3, warn=2, info=1
+            return (file.errors || 0) * 3 + (file.warnings || 0) * 2 + (file.info || 0) * 1;
+        }
+        
+        function getSeverityColorByScore(score) {
+            if (score >= 10) return '#ef4444'; // High severity - red
+            if (score >= 5) return '#f59e0b';  // Medium severity - orange  
+            if (score >= 2) return '#3b82f6';  // Low severity - blue
+            return '#10b981';                   // Very low - green
+        }
+        
+        // Filter functionality
+        function initializeFilters() {
+            const severityFilter = document.getElementById('severityFilter');
+            const detectorFilter = document.getElementById('detectorFilter');
+            
+            // Populate detector filter
+            const detectors = Object.keys(dashboardData.summary?.detector_counts || {});
+            detectors.forEach(detector => {
+                const option = document.createElement('option');
+                option.value = detector;
+                option.textContent = detector.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                detectorFilter.appendChild(option);
+            });
+            
+            // Add event listeners
+            severityFilter.addEventListener('change', (e) => {
+                currentFilter.severity = e.target.value;
+                applyFilters();
+            });
+            
+            detectorFilter.addEventListener('change', (e) => {
+                currentFilter.detector = e.target.value;
+                applyFilters();
+            });
+        }
+        
+        function filterBySeverity(severity) {
+            document.getElementById('severityFilter').value = severity;
+            currentFilter.severity = severity;
+            applyFilters();
+            document.getElementById('files').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        function filterByDetector(detector) {
+            document.getElementById('detectorFilter').value = detector;
+            currentFilter.detector = detector;
+            applyFilters();
+            document.getElementById('files').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        function applyFilters() {
+            const fileItems = document.querySelectorAll('.file-item');
+            
+            fileItems.forEach(item => {
+                const shouldShow = matchesFilter(item);
+                item.style.display = shouldShow ? 'block' : 'none';
+                
+                if (shouldShow) {
+                    item.classList.add('fade-in');
+                }
+            });
+        }
+        
+        function matchesFilter(fileItem) {
+            // This would need to be enhanced based on actual file structure
+            // For now, show all items
+            return true;
+        }
+        
+        // Navigation functionality
+        function initializeNavigation() {
+            const navItems = document.querySelectorAll('.nav-item');
+            const sections = document.querySelectorAll('.section');
+            
+            // Handle navigation clicks
+            navItems.forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    
+                    // Update active state
+                    navItems.forEach(nav => nav.classList.remove('active'));
+                    item.classList.add('active');
+                    
+                    // Scroll to section
+                    const targetId = item.getAttribute('href');
+                    document.querySelector(targetId).scrollIntoView({ 
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                });
+            });
+            
+            // Handle scroll-based navigation updates
+            function updateActiveNavOnScroll() {
+                let current = '';
+                const scrollPosition = window.scrollY + 150; // Offset for header
+                
+                sections.forEach(section => {
+                    const sectionTop = section.offsetTop;
+                    const sectionHeight = section.offsetHeight;
+                    
+                    if (scrollPosition >= sectionTop && scrollPosition < sectionTop + sectionHeight) {
+                        current = section.getAttribute('id');
+                    }
+                });
+                
+                // Update active navigation item
+                navItems.forEach(item => {
+                    item.classList.remove('active');
+                    if (item.getAttribute('href') === '#' + current) {
+                        item.classList.add('active');
+                    }
+                });
+            }
+            
+            // Throttled scroll listener for performance
+            let ticking = false;
+            function handleScroll() {
+                if (!ticking) {
+                    requestAnimationFrame(() => {
+                        updateActiveNavOnScroll();
+                        ticking = false;
+                    });
+                    ticking = true;
+                }
+            }
+            
+            window.addEventListener('scroll', handleScroll);
+            
+            // Initialize active state
+            updateActiveNavOnScroll();
+        }
+        
+        // File interaction
+        function initializeFileInteraction() {
+            const fileItems = document.querySelectorAll('.file-item');
+            
+            fileItems.forEach(item => {
+                item.addEventListener('click', () => {
+                    const issuesDiv = item.querySelector('.file-issues');
+                    if (issuesDiv) {
+                        issuesDiv.classList.toggle('show');
+                        
+                        // Animate the expansion
+                        if (issuesDiv.classList.contains('show')) {
+                            issuesDiv.style.maxHeight = issuesDiv.scrollHeight + 'px';
+                        } else {
+                            issuesDiv.style.maxHeight = '0px';
+                        }
+                    }
+                });
+            });
+        }
+        
+        function scrollToFile(fileName) {
+            const fileItems = document.querySelectorAll('.file-item');
+            fileItems.forEach(item => {
+                const nameElement = item.querySelector('.file-name');
+                if (nameElement && nameElement.textContent.includes(fileName)) {
+                    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    item.style.background = '#eff6ff';
+                    setTimeout(() => {
+                        item.style.background = '';
+                    }, 2000);
+                }
+            });
+        }
+        
+        // Enhanced issue exploration
+        function showIssueDetails(issueData) {
+            const issueSection = document.getElementById('issue-summary');
+            
+            issueSection.innerHTML = 
+                '<h3>Issue Details</h3>' +
+                '<div class="issue-detail">' +
+                    '<strong>Type:</strong> ' + (issueData.detector_id || 'Unknown') + '<br>' +
+                    '<strong>Severity:</strong> <span class="severity-' + issueData.severity + '">' + issueData.severity.toUpperCase() + '</span><br>' +
+                    '<strong>Message:</strong> ' + (issueData.message || 'No message available') + '<br>' +
+                    '<strong>Location:</strong> ' + (issueData.location ? issueData.location.file + ':' + issueData.location.line : 'Unknown') +
+                '</div>';
+        }
+        
+        function showFileIssues(file) {
+            const issueSection = document.getElementById('issue-summary');
+            
+            let issuesHtml = '<h3>Issues in ' + file.name + '</h3>';
+            issuesHtml += '<div class="file-issues-explorer">';
+            
+            if (file.issues && file.issues.length > 0) {
+                const severityCounts = { error: 0, warn: 0, info: 0 };
+                
+                file.issues.forEach(issue => {
+                    severityCounts[issue.severity] = (severityCounts[issue.severity] || 0) + 1;
+                    
+                    const locationText = issue.location ? 
+                        `Line ${issue.location.line}${issue.location.column ? `, Column ${issue.location.column}` : ''}` : 
+                        'Unknown location';
+                    
+                    issuesHtml += `
+                        <div class="issue-item ${issue.severity}" style="margin-bottom: 15px; cursor: pointer;" onclick="showIssueDetails(${JSON.stringify(issue).replace(/"/g, '&quot;')})">
+                            <div class="issue-header">
+                                <span class="issue-severity ${issue.severity}">${issue.severity.toUpperCase()}</span>
+                                <span class="issue-location">${locationText}</span>
+                            </div>
+                            <div class="issue-message">${issue.message}</div>
+                            <div class="issue-detector">${(issue.detector_id || 'unknown').replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>
+                        </div>
+                    `;
+                });
+                
+                // Add summary at the top
+                const summaryBadges = [];
+                if (severityCounts.error > 0) summaryBadges.push(`<span class="metric-badge error">${severityCounts.error} errors</span>`);
+                if (severityCounts.warn > 0) summaryBadges.push(`<span class="metric-badge warn">${severityCounts.warn} warnings</span>`);
+                if (severityCounts.info > 0) summaryBadges.push(`<span class="metric-badge info">${severityCounts.info} info</span>`);
+                
+                issuesHtml = issuesHtml.replace('<div class="file-issues-explorer">', 
+                    `<div class="file-summary" style="margin-bottom: 20px; padding: 15px; background: #f8fafc; border-radius: 8px;">
+                        <div style="margin-bottom: 10px;"><strong>Total Issues:</strong> ${file.issues.length}</div>
+                        <div>${summaryBadges.join(' ')}</div>
+                    </div>
+                    <div class="file-issues-explorer">`);
+                    
+            } else {
+                issuesHtml += '<p style="color: #64748b; text-align: center; padding: 30px;">No issues found in this file.</p>';
+            }
+            
+            issuesHtml += '</div>';
+            issueSection.innerHTML = issuesHtml;
+            
+            // Scroll to the issue explorer
+            document.getElementById('issues').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        
+        function showDetectorIssues(detectorId) {
+            const issueSection = document.getElementById('issue-summary');
+            const detectorIssues = dashboardData.issues_by_detector[detectorId] || [];
+            
+            let issuesHtml = '<h3>Issues from ' + detectorId.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) + '</h3>';
+            
+            if (detectorIssues.length > 0) {
+                issuesHtml += '<div class="detector-issues-explorer">';
+                
+                // Group by file
+                const issuesByFile = {};
+                detectorIssues.forEach(issue => {
+                    const fileName = issue.location ? issue.location.file : 'Unknown';
+                    if (!issuesByFile[fileName]) issuesByFile[fileName] = [];
+                    issuesByFile[fileName].push(issue);
+                });
+                
+                Object.entries(issuesByFile).forEach(([fileName, issues]) => {
+                    issuesHtml += `<div class="file-group" style="margin-bottom: 20px;">`;
+                    issuesHtml += `<h4 style="color: var(--primary-color); margin-bottom: 10px;">📁 ${fileName} (${issues.length} issues)</h4>`;
+                    
+                    issues.forEach(issue => {
+                        const locationText = issue.location ? 
+                            `Line ${issue.location.line}${issue.location.column ? `, Column ${issue.location.column}` : ''}` : 
+                            'Unknown location';
+                        
+                        issuesHtml += `
+                            <div class="issue-item ${issue.severity}" style="margin-bottom: 10px; margin-left: 20px; cursor: pointer;" onclick="showIssueDetails(${JSON.stringify(issue).replace(/"/g, '&quot;')})">
+                                <div class="issue-header">
+                                    <span class="issue-severity ${issue.severity}">${issue.severity.toUpperCase()}</span>
+                                    <span class="issue-location">${locationText}</span>
+                                </div>
+                                <div class="issue-message">${issue.message}</div>
+                            </div>
+                        `;
+                    });
+                    
+                    issuesHtml += '</div>';
+                });
+                
+                issuesHtml += '</div>';
+            } else {
+                issuesHtml += '<p style="color: #64748b; text-align: center; padding: 30px;">No issues found for this detector.</p>';
+            }
+            
+            issueSection.innerHTML = issuesHtml;
+            
+            // Scroll to the issue explorer
+            document.getElementById('issues').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        
+        function showSeverityIssues(severity) {
+            const issueSection = document.getElementById('issue-summary');
+            const allIssues = [];
+            
+            // Collect all issues of the specified severity
+            dashboardData.files.forEach(file => {
+                file.issues.forEach(issue => {
+                    if (issue.severity === severity) {
+                        allIssues.push({...issue, fileName: file.name});
+                    }
+                });
+            });
+            
+            let issuesHtml = '<h3>' + severity.toUpperCase() + ' Issues (' + allIssues.length + ')</h3>';
+            
+            if (allIssues.length > 0) {
+                issuesHtml += '<div class="severity-issues-explorer">';
+                
+                // Group by file
+                const issuesByFile = {};
+                allIssues.forEach(issue => {
+                    const fileName = issue.fileName || issue.location?.file || 'Unknown';
+                    if (!issuesByFile[fileName]) issuesByFile[fileName] = [];
+                    issuesByFile[fileName].push(issue);
+                });
+                
+                Object.entries(issuesByFile).forEach(([fileName, issues]) => {
+                    issuesHtml += `<div class="file-group" style="margin-bottom: 20px;">`;
+                    issuesHtml += `<h4 style="color: var(--primary-color); margin-bottom: 10px;">📁 ${fileName} (${issues.length} issues)</h4>`;
+                    
+                    issues.forEach(issue => {
+                        const locationText = issue.location ? 
+                            `Line ${issue.location.line}${issue.location.column ? `, Column ${issue.location.column}` : ''}` : 
+                            'Unknown location';
+                        
+                        issuesHtml += `
+                            <div class="issue-item ${issue.severity}" style="margin-bottom: 10px; margin-left: 20px; cursor: pointer;" onclick="showIssueDetails(${JSON.stringify(issue).replace(/"/g, '&quot;')})">
+                                <div class="issue-header">
+                                    <span class="issue-severity ${issue.severity}">${issue.severity.toUpperCase()}</span>
+                                    <span class="issue-location">${locationText}</span>
+                                </div>
+                                <div class="issue-message">${issue.message}</div>
+                                <div class="issue-detector">${(issue.detector_id || 'unknown').replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>
+                            </div>
+                        `;
+                    });
+                    
+                    issuesHtml += '</div>';
+                });
+                
+                issuesHtml += '</div>';
+            } else {
+                issuesHtml += '<p style="color: #64748b; text-align: center; padding: 30px;">No ' + severity + ' issues found.</p>';
+            }
+            
+            issueSection.innerHTML = issuesHtml;
+            
+            // Scroll to the issue explorer
+            document.getElementById('issues').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case '1':
+                        e.preventDefault();
+                        document.getElementById('overview').scrollIntoView({ behavior: 'smooth' });
+                        break;
+                    case '2':
+                        e.preventDefault();
+                        document.getElementById('charts').scrollIntoView({ behavior: 'smooth' });
+                        break;
+                    case '3':
+                        e.preventDefault();
+                        document.getElementById('files').scrollIntoView({ behavior: 'smooth' });
+                        break;
+                }
+            }
+        });
+        
+        // Export functionality
+        function exportReport() {
+            const reportData = {
+                timestamp: new Date().toISOString(),
+                summary: dashboardData.summary,
+                files: dashboardData.files,
+                issues: dashboardData.issues || []
+            };
+            
+            const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'pythonium-report-' + new Date().toISOString().split('T')[0] + '.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
