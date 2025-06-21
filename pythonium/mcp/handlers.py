@@ -76,7 +76,7 @@ class ToolHandlers:
         profiler.checkpoint("project_root_found", project_root=str(project_root))
         
         # Get or create config from the project root
-        project_config = get_or_create_config(project_root)
+        project_config = get_or_create_config(project_root, auto_create=False)
         profiler.checkpoint("project_config_loaded", 
                           has_config=project_config is not None)
         
@@ -104,12 +104,30 @@ class ToolHandlers:
         
         profiler.checkpoint("analyzer_created")
         
-        # Discover files before analysis
+        # Discover files before analysis and check limits
         if path.is_dir():
             # Get list of files that will be analyzed
             python_files = list(path.rglob("*.py"))
             log_file_discovery(path, python_files)
             profiler.checkpoint("file_discovery", file_count=len(python_files))
+            
+            # Check max files limit from MCP config
+            mcp_config = config.get("mcp", {})
+            max_files = mcp_config.get("max_files_to_analyze", 1000)
+            
+            if len(python_files) > max_files:
+                error_msg = (
+                    f"Directory contains {len(python_files)} Python files, which exceeds the "
+                    f"maximum limit of {max_files} files for analysis. "
+                    f"Please analyze a smaller directory, specific subdirectories, or "
+                    f"individual files instead. You can also override this limit by "
+                    f"providing 'mcp': {{'max_files_to_analyze': {len(python_files)}}} in the config parameter."
+                )
+                logger.warning(error_msg)
+                return [types.TextContent(
+                    type="text",
+                    text=f"Error: {error_msg}"
+                )]
             
             # Add safety check for large repositories
             if len(python_files) > 100:
@@ -118,6 +136,14 @@ class ToolHandlers:
         else:
             log_file_discovery(path, [path])
             profiler.checkpoint("file_discovery", file_count=1)
+        
+        # Purge cache of excluded paths at the beginning of analysis
+        if use_cache and analyzer.cache:
+            ignored_paths = config.get("ignore", [])
+            if ignored_paths:
+                logger.info("Purging cache for excluded paths...")
+                analyzer.cache.purge_excluded_paths(ignored_paths)
+                profiler.checkpoint("cache_purged", excluded_patterns=len(ignored_paths))
         
         # Start analysis
         log_analysis_start([path] if path.is_file() else python_files)

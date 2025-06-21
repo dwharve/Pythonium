@@ -331,11 +331,7 @@ class Analyzer:
             files: Optional list of specific files to analyze. If None, analyzes all Python files.
             force_full: Force full analysis even if incremental analysis is available
             
-        Returns:
-            List of issues found by all registered detectors
-            
-        Raises:
-            AnalysisError: If analysis fails        """
+        Returns:        """
         start_time = time.time()
         
         try:
@@ -345,6 +341,11 @@ class Analyzer:
             if not files_to_analyze:
                 logger.info("No files to analyze")
                 return []
+            
+            # Purge cache of excluded paths at the beginning of analysis
+            if self.cache and self.settings.ignored_paths:
+                logger.debug("Purging cache for excluded paths...")
+                self.cache.purge_excluded_paths(self.settings.ignored_paths)
             
             # Invalidate cache for changed files and their dependents
             self._invalidate_changed_files(files_to_analyze)

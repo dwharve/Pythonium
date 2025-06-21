@@ -314,6 +314,11 @@ class Settings:
                 "max_workers": 4
             },
             
+            # MCP-specific limits
+            "mcp": {
+                "max_files_to_analyze": 1000
+            },
+            
             # Convert detector settings to config format
             "detectors": {},
             

@@ -529,6 +529,102 @@ class AnalysisCache:
                     logger.debug("Cleared all detector issues cache")
                 conn.commit()
         except Exception as e:            logger.warning("Failed to clear detector issues cache: %s", e)
+    
+    def purge_excluded_paths(self, excluded_paths: List[str]) -> None:
+        """
+        Purge cache entries for files that match excluded patterns.
+        
+        Args:
+            excluded_paths: List of glob patterns for paths to exclude from cache
+        """
+        import fnmatch
+        from pathlib import Path
+        
+        try:
+            with sqlite3.connect(self.cache_path) as conn:
+                # Get all file paths from the cache
+                cursor = conn.execute("SELECT file_path FROM file_cache")
+                cached_files = [row[0] for row in cursor.fetchall()]
+                
+                files_to_remove = []
+                for file_path in cached_files:
+                    path_obj = Path(file_path)
+                    # Check if file matches any excluded pattern
+                    for pattern in excluded_paths:
+                        if fnmatch.fnmatch(str(path_obj), pattern) or fnmatch.fnmatch(str(path_obj.resolve()), pattern):
+                            files_to_remove.append(file_path)
+                            break
+                        # Also check parent directories
+                        for parent in path_obj.parents:
+                            if fnmatch.fnmatch(str(parent), pattern):
+                                files_to_remove.append(file_path)
+                                break
+                
+                # Remove matching files from all cache tables
+                removed_count = 0
+                for file_path in files_to_remove:
+                    conn.execute("DELETE FROM file_cache WHERE file_path = ?", (file_path,))
+                    
+                    # For call_graph_cache, we need to match against caller/callee names
+                    # Since these are function names, not file paths, we'll skip this table
+                    # or use a different approach if needed
+                    
+                    conn.execute("DELETE FROM file_dependencies WHERE dependent_file = ? OR dependency_file = ?", (file_path, file_path))
+                    
+                    # For detector issues, remove entries that involve this file
+                    conn.execute("""
+                        DELETE FROM detector_issues 
+                        WHERE files_involved LIKE ?
+                    """, (f"%{file_path}%",))
+                    
+                    removed_count += 1
+                
+                conn.commit()
+                
+                if removed_count > 0:
+                    logger.info("Purged %d excluded files from cache", removed_count)
+                    
+        except Exception as e:
+            logger.warning("Failed to purge excluded paths from cache: %s", e)
+        
+        # Also clear AST cache for excluded files
+        ast_cache = get_ast_cache()
+        if ast_cache:
+            for file_path in files_to_remove:
+                ast_cache.invalidate_file(file_path)
+    
+    def purge_cache_by_paths(self, file_paths: List[Path]) -> None:
+        """
+        Purge cache entries for specific file paths.
+        
+        Args:
+            file_paths: List of specific file paths to remove from cache
+        """
+        try:
+            with sqlite3.connect(self.cache_path) as conn:
+                removed_count = 0
+                for file_path in file_paths:
+                    file_str = str(file_path.resolve())
+                    
+                    # Remove from cache tables that have file_path columns
+                    conn.execute("DELETE FROM file_cache WHERE file_path = ?", (file_str,))
+                    conn.execute("DELETE FROM file_dependencies WHERE dependent_file = ? OR dependency_file = ?", (file_str, file_str))
+                    
+                    # For detector issues, remove entries that involve this file
+                    conn.execute("""
+                        DELETE FROM detector_issues 
+                        WHERE files_involved LIKE ?
+                    """, (f"%{file_str}%",))
+                    
+                    removed_count += 1
+                
+                conn.commit()
+                
+                if removed_count > 0:
+                    logger.debug("Purged %d specific files from cache", removed_count)
+                    
+        except Exception as e:
+            logger.warning("Failed to purge specific paths from cache: %s", e)
 
     def _calculate_file_hash(self, file_path: str) -> str:
         """Calculate hash for a single file."""

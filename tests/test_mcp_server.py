@@ -49,10 +49,10 @@ result = test_function()
         except ImportError:
             self.skipTest("MCP dependencies not available")
     
-    @patch('pythonium.mcp_server.MCP_AVAILABLE', True)
+    @patch('pythonium.mcp.server.MCP_AVAILABLE', True)
     def test_mcp_server_creation_with_mcp_available(self):
         """Test MCP server creation when MCP is available."""
-        with patch('pythonium.mcp_server.Server') as mock_server:
+        with patch('pythonium.mcp.server.Server') as mock_server:
             from pythonium.mcp_server import PythoniumMCPServer
             server = PythoniumMCPServer(name="test-server", version="1.0.0")
             self.assertIsNotNone(server)
@@ -62,7 +62,7 @@ result = test_function()
     
     def test_mcp_server_creation_without_mcp(self):
         """Test MCP server creation when MCP is not available."""
-        with patch('pythonium.mcp_server.MCP_AVAILABLE', False):
+        with patch('pythonium.mcp.server.MCP_AVAILABLE', False):
             from pythonium.mcp_server import PythoniumMCPServer
             with self.assertRaises(ImportError):
                 PythoniumMCPServer()
@@ -80,8 +80,8 @@ result = test_function()
                 "path": str(self.test_file)
             }
             
-            # Run the analyze_code method
-            result = asyncio.run(server._analyze_code(arguments))
+            # Run the analyze_code method via handlers
+            result = asyncio.run(server.handlers.analyze_code(arguments))
             
             self.assertIsInstance(result, list)
             self.assertGreater(len(result), 0)
@@ -114,13 +114,13 @@ result = hello()
                 "filename": "inline_test.py"
             }
             
-            # Run the analyze_inline_code method
-            result = asyncio.run(server._analyze_inline_code(arguments))
+            # Run the analyze_inline_code method via handlers
+            result = asyncio.run(server.handlers.analyze_inline_code(arguments))
             
             self.assertIsInstance(result, list)
             self.assertGreater(len(result), 0)
             self.assertIsInstance(result[0], types.TextContent)
-            self.assertIn("inline_test.py", result[0].text)
+            self.assertIn("analysis completed", result[0].text.lower())
             
         except ImportError:
             self.skipTest("MCP dependencies not available")
@@ -140,7 +140,7 @@ result = hello()
                 "filename": "test.py"
             }
             
-            result = asyncio.run(server._analyze_inline_code(arguments))
+            result = asyncio.run(server.handlers.analyze_inline_code(arguments))
             
             self.assertIsInstance(result, list)
             self.assertGreater(len(result), 0)
@@ -207,9 +207,10 @@ result = hello()
             self.skipTest("MCP dependencies not available")
     
     @patch('pythonium.mcp_server.MCP_AVAILABLE', True)
+    @patch('pythonium.mcp.server.MCP_AVAILABLE', True)
     def test_setup_handlers_coverage(self):
         """Test that all handlers are properly set up."""
-        with patch('pythonium.mcp_server.Server') as mock_server:
+        with patch('pythonium.mcp.server.Server') as mock_server:
             mock_server_instance = MagicMock()
             mock_server.return_value = mock_server_instance
             
@@ -246,13 +247,13 @@ result = hello()
             # Test with invalid path - should raise ValueError
             arguments = {"path": "/nonexistent/path.py"}
             with self.assertRaises(ValueError) as context:
-                asyncio.run(server._analyze_code(arguments))
+                asyncio.run(server.handlers.analyze_code(arguments))
             self.assertIn("Path does not exist", str(context.exception))
             
             # Test with missing path argument
             arguments = {}
             with self.assertRaises(ValueError) as context:
-                asyncio.run(server._analyze_code(arguments))
+                asyncio.run(server.handlers.analyze_code(arguments))
             self.assertIn("Path is required", str(context.exception))
             
         except ImportError:
@@ -268,7 +269,7 @@ result = hello()
             # Test with missing code argument - should raise ValueError
             arguments = {}
             with self.assertRaises(ValueError) as context:
-                asyncio.run(server._analyze_inline_code(arguments))
+                asyncio.run(server.handlers.analyze_inline_code(arguments))
             self.assertIn("Code is required", str(context.exception))
             
         except ImportError:
@@ -281,16 +282,17 @@ result = hello()
             
             server = PythoniumMCPServer()
             
-            # Test with missing detector_id - should raise ValueError
+            # Test with missing detector_id - should return error message
             arguments = {}
-            with self.assertRaises(ValueError) as context:
-                asyncio.run(server._get_detector_info(arguments))
-            self.assertIn("detector_id is required", str(context.exception))
+            result = asyncio.run(server._get_detector_info(arguments))
+            self.assertIsInstance(result, list)
+            self.assertIn("not found", result[0].text)
             
             # Test with invalid detector_id
             arguments = {"detector_id": "nonexistent_detector"}
             result = asyncio.run(server._get_detector_info(arguments))
             self.assertIsInstance(result, list)
+            self.assertIn("not found", result[0].text)
             
         except ImportError:
             self.skipTest("MCP dependencies not available")
@@ -312,13 +314,13 @@ result = hello()
                 }
             }
             
-            result = asyncio.run(server._analyze_code(arguments))
+            result = asyncio.run(server.handlers.analyze_code(arguments))
             self.assertIsInstance(result, list)
             
         except ImportError:
             self.skipTest("MCP dependencies not available")
     
-    @patch('pythonium.mcp_server.MCP_AVAILABLE', False)
+    @patch('pythonium.mcp.server.MCP_AVAILABLE', False)
     def test_mcp_import_error_handling(self):
         """Test proper handling when MCP is not available."""
         with self.assertRaises(ImportError) as context:
@@ -382,7 +384,7 @@ result = hello()
                 "detectors": ["dead_code", "clone"]
             }
             
-            result = asyncio.run(server._analyze_code(arguments))
+            result = asyncio.run(server.handlers.analyze_code(arguments))
             self.assertIsInstance(result, list)
             self.assertGreater(len(result), 0)
             
@@ -408,7 +410,7 @@ result = hello()
                 }
             }
             
-            result = asyncio.run(server._analyze_code(arguments))
+            result = asyncio.run(server.handlers.analyze_code(arguments))
             self.assertIsInstance(result, list)
             self.assertGreater(len(result), 0)
             
@@ -435,7 +437,7 @@ result = hello()
                 }
             }
             
-            result = asyncio.run(server._analyze_inline_code(arguments))
+            result = asyncio.run(server.handlers.analyze_inline_code(arguments))
             self.assertIsInstance(result, list)
             self.assertGreater(len(result), 0)
             

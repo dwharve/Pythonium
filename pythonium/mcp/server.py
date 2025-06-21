@@ -68,7 +68,7 @@ class PythoniumMCPServer:
         """Dynamically discover available detectors."""
         try:
             project_root = find_project_root(Path.cwd())
-            config = get_or_create_config(project_root)
+            config = get_or_create_config(project_root, auto_create=False)
             analyzer = Analyzer(root_path=project_root, config=config)
             
             detector_info = {}
