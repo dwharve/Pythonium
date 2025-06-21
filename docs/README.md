@@ -20,27 +20,45 @@ Welcome to the Pythonium documentation! This directory contains comprehensive gu
 - [LLM Agent Integration](llm-integration.md) - Using Pythonium with AI coding assistants
 
 ### Detector Documentation
-- [Dead Code Detector](detectors/dead-code.md) - Finding unused code
-- [Clone Detector](detectors/clone.md) - Identifying code duplication
-- [Security Detector](detectors/security-smell.md) - Finding security vulnerabilities
-- [Complexity Detector](detectors/complexity-hotspot.md) - Identifying complex code
-- [All Detectors](detectors/README.md) - Complete detector reference
+- [Detector Overview](detectors/README.md) - Complete detector reference and documentation
+- [Advanced Patterns](detectors/advanced-patterns.md) - Pattern detection capabilities
+- [Alternative Implementation](detectors/alt-implementation.md) - Finding competing implementations
+- [Block Clone Detection](detectors/block-clone.md) - Block-level code duplication
+- [Circular Dependencies](detectors/circular-deps.md) - Import cycle detection
+- [Code Clone Detection](detectors/clone.md) - Code duplication analysis
+- [Complexity Hotspots](detectors/complexity-hotspot.md) - Complexity analysis
+- [Dead Code Detection](detectors/dead-code.md) - Unused code identification
+- [Deprecated API Detection](detectors/deprecated-api.md) - Finding deprecated usage
+- [Inconsistent API](detectors/inconsistent-api.md) - API consistency checking
+- [Security Smell Detection](detectors/security-smell.md) - Security vulnerability detection
+- [Semantic Equivalence](detectors/semantic-equivalence.md) - Functionally equivalent code
+- [Stub Implementation](detectors/stub-implementation.md) - Placeholder code detection
 
 ## Documentation Structure
 
 ```
 docs/
 ├── README.md                    # This file
-├── creating-detectors.md        # Guide for creating custom detectors
-├── configuration.md             # Configuration reference
+├── api-reference.md             # Python API documentation
+├── architecture.md              # Internal architecture overview
 ├── cli-reference.md             # CLI documentation
-├── api-reference.md             # Python API docs
-├── architecture.md              # Internal architecture
+├── configuration.md             # Configuration reference
+├── creating-detectors.md        # Guide for creating custom detectors
+├── llm-integration.md           # LLM agent integration guide
 ├── mcp-server.md               # MCP server documentation
 ├── output-formats.md           # Output format specifications
-├── detectors/                  # Detector-specific documentation
-│   ├── README.md
-│   ├── dead-code.md
-│   ├── clone.md
-│   └── ...
+└── detectors/                  # Detector-specific documentation
+    ├── README.md               # Detector overview
+    ├── advanced-patterns.md    # Pattern detection
+    ├── alt-implementation.md   # Alternative implementations
+    ├── block-clone.md          # Block-level clones
+    ├── circular-deps.md        # Circular dependencies
+    ├── clone.md                # Code clones
+    ├── complexity-hotspot.md   # Complexity analysis
+    ├── dead-code.md            # Dead code detection
+    ├── deprecated-api.md       # Deprecated API usage
+    ├── inconsistent-api.md     # API consistency
+    ├── security-smell.md       # Security issues
+    ├── semantic-equivalence.md # Semantic equivalence
+    └── stub-implementation.md  # Placeholder code detection
 ```

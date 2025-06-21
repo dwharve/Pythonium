@@ -5,7 +5,7 @@
 
 A comprehensive static analysis tool for identifying and reporting code health issues in Python projects. Designed for developers who want to maintain high-quality, maintainable codebases.
 
-## 🚀 Features
+## Features
 
 ### Core Detectors
 - **Dead Code Detection**: Identify unused functions, classes, and modules
@@ -19,16 +19,17 @@ A comprehensive static analysis tool for identifying and reporting code health i
 - **Block-Level Clone Detection**: Find duplicate code blocks within and across functions
 - **Semantic Equivalence Detection**: Identify functionally equivalent code implemented differently
 - **Advanced Pattern Recognition**: Detect algorithmic patterns and design pattern opportunities
+- **Stub Implementation Detection**: Identify placeholder, mock, and fallback implementations
 
 ### Capabilities  
-- **🤖 MCP Integration**: Model Context Protocol support for LLM agents
-- **📊 Multiple Output Formats**: Text, JSON, SARIF, HTML reports
-- **⚙️ Configurable Rules**: Customize thresholds and detector behavior
-- **🔌 Extensible Architecture**: Plugin system for custom detectors
-- **🏃‍♂️ Fast Analysis**: Efficient parsing and analysis engine
-- **💾 Persistent Caching**: SQLite cache in project root for fast incremental analysis
+- **MCP Integration**: Model Context Protocol support for LLM agents
+- **Multiple Output Formats**: Text, JSON, SARIF, HTML reports
+- **Configurable Rules**: Customize thresholds and detector behavior
+- **Extensible Architecture**: Plugin system for custom detectors
+- **Fast Analysis**: Efficient parsing and analysis engine
+- **Persistent Caching**: SQLite cache in project root for fast incremental analysis
 
-## 📦 Installation
+## Installation
 
 ```bash
 # Basic installation
@@ -41,7 +42,7 @@ pip install pythonium[mcp]
 pip install pythonium[dev]
 ```
 
-## 🏁 Quick Start
+## Quick Start
 
 ### Command Line Usage
 
@@ -66,6 +67,9 @@ pythonium crawl myproject/ --format json --output issues.json
 
 # Create default configuration file
 pythonium init-config
+
+# Show version
+pythonium version
 ```
 
 ### MCP Server for LLM Agents
@@ -76,6 +80,9 @@ pythonium mcp-server --transport stdio
 
 # Start MCP server with SSE transport (HTTP)
 pythonium mcp-server --transport sse --host localhost --port 8000
+
+# Start with debug logging
+pythonium mcp-server --transport stdio --debug
 ```
 
 ### Python API
@@ -106,35 +113,45 @@ Create a `.pythonium.yml` file in your project root:
 detectors:
   dead_code:
     enabled: true
-    entry_points:
-      - "main"
-      - "app:main"
   clone:
     enabled: true
-    similarity_threshold: 0.9  # 1.0 for exact clones, <1.0 for near clones
-    min_lines: 5
+    similarity_threshold: 0.85  # 1.0 for exact clones, <1.0 for near clones
+    min_lines: 4
   block_clone:
     enabled: true
     min_statements: 3
-    similarity_threshold: 0.9
+    similarity_threshold: 0.85
   semantic_equivalence:
     enabled: true
-    detect_builtin_equivalents: true
-    min_confidence: 0.7
   advanced_patterns:
     enabled: true
-    detect_design_patterns: true
-    detect_algorithmic_patterns: true
-    similarity_threshold: 0.8
   security_smell:
     enabled: true
-    check_hardcoded_secrets: true
-    check_sql_injection: true
   complexity_hotspot:
     enabled: true
-    max_complexity: 10
+    max_complexity: 8
   inconsistent_api:
-    enabled: false
+    enabled: true
+  alt_implementation:
+    enabled: true
+  circular_deps:
+    enabled: true
+  deprecated_api:
+    enabled: true
+  stub_implementation:
+    enabled: true
+
+# Global ignore patterns (replaces defaults)
+ignore:
+  - "**/tests/**"
+  - "**/__pycache__/**"
+  - "**/venv/**"
+
+# Threshold values (merges with defaults)
+thresholds:
+  complexity_cyclomatic: 8
+  clone_similarity: 0.85
+  clone_min_lines: 4
 
 # Set severity levels
 severity:
@@ -145,9 +162,14 @@ severity:
   advanced_patterns: "info"
   security_smell: "error"
   complexity_hotspot: "warn"
+  inconsistent_api: "warn"
+  alt_implementation: "warn"
+  circular_deps: "error"
+  deprecated_api: "warn"
+  stub_implementation: "info"
 ```
 
-## 📚 Documentation
+## Documentation
 
 For comprehensive documentation, see the [`docs/`](docs/) directory:
 

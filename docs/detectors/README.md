@@ -4,34 +4,36 @@ This directory contains comprehensive documentation for all Pythonium detectors,
 
 ## Overview
 
-Pythonium includes 11 core detectors that analyze different aspects of Python code quality:
+Pythonium includes 12 core detectors that analyze different aspects of Python code quality:
 
 | Detector | Category | Purpose | Typical Severity |
 |----------|----------|---------|------------------|
 | [Dead Code](dead-code.md) | Code Quality | Find unused code | warn |
-| [Clone Detector](clone.md) | Duplication | Find duplicate code | error |
-| [Security Smell](security.md) | Security | Find vulnerabilities | error |
-| [Complexity](complexity.md) | Code Quality | Find complex code | warn |
-| [Circular Dependencies](circular-deps.md) | Architecture | Find import cycles | warn |
+| [Clone Detector](clone.md) | Duplication | Find duplicate code | warn |
+| [Security Smell](security-smell.md) | Security | Find vulnerabilities | error |
+| [Complexity Hotspot](complexity-hotspot.md) | Code Quality | Find complex code | warn |
+| [Circular Dependencies](circular-deps.md) | Architecture | Find import cycles | error |
 | [Inconsistent API](inconsistent-api.md) | Architecture | Find API inconsistencies | warn |
-| [Alternative Implementation](alt-implementation.md) | Architecture | Find competing implementations | info |
-| [Deprecated API](deprecated-api.md) | Security | Find deprecated usage | warn |
+| [Alternative Implementation](alt-implementation.md) | Architecture | Find competing implementations | warn |
+| [Deprecated API](deprecated-api.md) | Maintenance | Find deprecated usage | warn |
 | [Block Clone](block-clone.md) | Duplication | Find duplicate blocks | warn |
 | [Semantic Equivalence](semantic-equivalence.md) | Code Quality | Find equivalent implementations | info |
 | [Advanced Patterns](advanced-patterns.md) | Architecture | Find design patterns | info |
+| [Stub Implementation](stub-implementation.md) | Code Quality | Find placeholder code | info |
 
 ## Quick Reference
 
 ### By Use Case
 
 **Security Review:**
-- [Security Smell Detector](security.md) - Find hardcoded secrets, SQL injection risks
+- [Security Smell Detector](security-smell.md) - Find hardcoded secrets, SQL injection risks
 - [Deprecated API Detector](deprecated-api.md) - Find usage of deprecated functions
 
 **Code Quality:**
 - [Dead Code Detector](dead-code.md) - Remove unused functions and variables
-- [Complexity Detector](complexity.md) - Identify overly complex functions
+- [Complexity Hotspot Detector](complexity-hotspot.md) - Identify overly complex functions
 - [Semantic Equivalence Detector](semantic-equivalence.md) - Find better implementations
+- [Stub Implementation Detector](stub-implementation.md) - Find placeholder code
 
 **Refactoring:**
 - [Clone Detector](clone.md) - Identify duplicate code for extraction
@@ -48,18 +50,19 @@ Pythonium includes 11 core detectors that analyze different aspects of Python co
 **Error Level (Fix Immediately):**
 - Security vulnerabilities
 - Circular dependencies
-- Exact code clones
 
 **Warning Level (Fix Soon):**
 - Dead code
 - High complexity
 - API inconsistencies
 - Deprecated API usage
+- Code clones
+- Alternative implementations
 
 **Info Level (Consider Improving):**
 - Design pattern opportunities
 - Semantic equivalence suggestions
-- Alternative implementations
+- Stub implementations
 
 ## Configuration Examples
 
