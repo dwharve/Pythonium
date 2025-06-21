@@ -118,10 +118,20 @@ class ToolHandlers:
             if len(python_files) > max_files:
                 error_msg = (
                     f"Directory contains {len(python_files)} Python files, which exceeds the "
-                    f"maximum limit of {max_files} files for analysis. "
-                    f"Please analyze a smaller directory, specific subdirectories, or "
-                    f"individual files instead. You can also override this limit by "
-                    f"providing 'mcp': {{'max_files_to_analyze': {len(python_files)}}} in the config parameter."
+                    f"maximum limit of {max_files} files for analysis.\n\n"
+                    f"RECOMMENDED SOLUTIONS:\n"
+                    f"1. Exclude common directories by adding ignore patterns:\n"
+                    f"   config: {{\n"
+                    f"     \"ignore\": [\n"
+                    f"       \"**/venv/**\", \"**/env/**\", \"**/.venv/**\",\n"
+                    f"       \"**/node_modules/**\", \"**/build/**\", \"**/dist/**\",\n"
+                    f"       \"**/tests/**\", \"**/__pycache__/**\"\n"
+                    f"     ]\n"
+                    f"   }}\n\n"
+                    f"2. Temporarily override the limit in this request:\n"
+                    f"   config: {{\"mcp\": {{\"max_files_to_analyze\": {len(python_files)}}}}}\n\n"
+                    f"TIP: Virtual environments, build artifacts, and test directories often contain "
+                    f"many files that don't need analysis."
                 )
                 logger.warning(error_msg)
                 return [types.TextContent(
