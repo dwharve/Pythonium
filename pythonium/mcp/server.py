@@ -25,7 +25,7 @@ from .handlers import ToolHandlers
 class PythoniumMCPServer:
     """MCP server for Pythonium code health analysis."""
     
-    def __init__(self, name: str = "pythonium", version: str = "0.1.0"):
+    def __init__(self, name: str = "pythonium", version: str = "0.1.0", debug: bool = False):
         """Initialize the MCP server."""
         if not MCP_AVAILABLE:
             raise ImportError(
@@ -33,13 +33,20 @@ class PythoniumMCPServer:
                 "pip install mcp"
             )
         
-        # Setup debug logging first
-        setup_debug_logging()
-        logger.info(f"Initializing Pythonium MCP Server v{version}")
+        # Setup debug logging only if requested
+        if debug:
+            setup_debug_logging()
+            logger.info(f"Initializing Pythonium MCP Server v{version}")
+        else:
+            # Setup minimal logging - only errors to console
+            logging.basicConfig(level=logging.ERROR, format='%(levelname)s: %(message)s')
+            # Use logger for initialization message but at WARNING level so it shows
+            logging.getLogger("pythonium.mcp").warning(f"Initializing Pythonium MCP Server v{version}")
         
         self.server = Server(name, version)
         self.name = name
         self.version = version
+        self.debug = debug
         
         # Initialize tool handlers
         self.handlers = ToolHandlers(self)
@@ -50,7 +57,11 @@ class PythoniumMCPServer:
         # Setup MCP handlers
         self._setup_handlers()
         
-        logger.info(f"MCP Server initialized with {len(self.available_detectors)} detectors")
+        if debug:
+            logger.info(f"MCP Server initialized with {len(self.available_detectors)} detectors")
+        else:
+            # Log at WARNING level so it shows in minimal logging mode
+            logging.getLogger("pythonium.mcp").warning(f"MCP Server initialized with {len(self.available_detectors)} detectors")
     
     @profile_operation("discover_detectors")
     def _discover_detectors(self) -> Dict[str, Dict[str, Any]]:
@@ -75,7 +86,13 @@ class PythoniumMCPServer:
                 }
                 detector_info[detector_id] = info
             
-            logger.info(f"Discovered {len(detector_info)} detectors")
+            if logger.handlers:  # Only log if debug logging is enabled
+                logger.info(f"Discovered {len(detector_info)} detectors")
+            else:
+                # Log at INFO level - won't show in minimal mode but available if needed
+                logging.getLogger("pythonium.mcp").info(f"Discovered {len(detector_info)} detector classes")
+                logging.getLogger("pythonium.mcp").info(f"Loaded {len(detector_info)} detectors")
+            
             return detector_info
             
         except Exception as e:
@@ -93,15 +110,24 @@ class PythoniumMCPServer:
         @self.server.list_tools()
         async def handle_list_tools():
             """Return list of available tools."""
-            logger.info("🔧 list_tools handler called")
+            if logger.handlers:
+                logger.info("list_tools handler called")
+            else:
+                # Log request processing at DEBUG level - won't show in minimal mode
+                logging.getLogger("pythonium.mcp").debug("Processing request of type ListToolsRequest")
             tools = self._get_tool_definitions()
-            logger.info(f"🔧 Returning {len(tools)} tools")
+            if logger.handlers:
+                logger.info(f"Returning {len(tools)} tools")
+            else:
+                logging.getLogger("pythonium.mcp").debug("list_tools handler called")
+                logging.getLogger("pythonium.mcp").debug(f"Returning {len(tools)} tools")
             return tools
         
         @self.server.call_tool()
         async def handle_call_tool(name: str, arguments):
             """Handle tool calls with profiling."""
-            logger.info(f"🔧 call_tool handler called - tool: {name}, args: {arguments}")
+            if logger.handlers:
+                logger.info(f"call_tool handler called - tool: {name}, args: {arguments}")
             if arguments is None:
                 arguments = {}
             
@@ -479,26 +505,26 @@ class PythoniumMCPServer:
         recommendations = []
         
         if issue_counts.get("error", 0) > 0:
-            recommendations.append("🚨 IMMEDIATE: Fix all ERROR-level issues (security risks, blocking bugs)")
+            recommendations.append("IMMEDIATE: Fix all ERROR-level issues (security risks, blocking bugs)")
         if issue_counts.get("warn", 0) > 0:
-            recommendations.append("⚠️  HIGH PRIORITY: Address WARN-level issues for code quality")
+            recommendations.append("HIGH PRIORITY: Address WARN-level issues for code quality")
         if issue_counts.get("info", 0) > 0:
-            recommendations.append("💡 OPTIMIZE: Review INFO-level suggestions for improvements")
+            recommendations.append("OPTIMIZE: Review INFO-level suggestions for improvements")
         
         # Add detector-specific strategic advice
         top_detector = sorted_detectors[0][0] if sorted_detectors else None
         if top_detector and top_detector in self._detector_info:
             detector_info = self._detector_info[top_detector]
             category = detector_info.get('category', 'Code Quality')
-            recommendations.append(f"🎯 FOCUS AREA: {category} issues are most prevalent ({top_detector})")
+            recommendations.append(f"FOCUS AREA: {category} issues are most prevalent ({top_detector})")
         
         # Add architectural recommendations based on detector patterns
         if any('circular' in d for d, _ in sorted_detectors):
-            recommendations.append("🏗️  ARCHITECTURE: Review module dependencies and circular imports")
+            recommendations.append("ARCHITECTURE: Review module dependencies and circular imports")
         if any('security' in d for d, _ in sorted_detectors):
-            recommendations.append("🔒 SECURITY: Conduct security review and update vulnerable patterns")
+            recommendations.append("SECURITY: Conduct security review and update vulnerable patterns")
         if any('duplicate' in d or 'clone' in d for d, _ in sorted_detectors):
-            recommendations.append("♻️  REFACTOR: Eliminate code duplication through refactoring")
+            recommendations.append("REFACTOR: Eliminate code duplication through refactoring")
         
         for i, rec in enumerate(recommendations, 1):
             output_lines.append(f"{i}. {rec}")
@@ -965,32 +991,32 @@ class PythoniumMCPServer:
             "",
             "COMMON VALIDATION ERRORS:",
             "",
-            "❌ Invalid detector name:",
+            "Invalid detector name:",
             "```yaml",
             "detectors:",
             "  invalid_detector:  # ERROR: Unknown detector",
             "    enabled: true",
             "```",
             "",
-            "❌ Invalid severity level:",
+            "Invalid severity level:",
             "```yaml",
             "severity:",
             "  dead_code: critical  # ERROR: Must be error|warn|info",
             "```",
             "",
-            "❌ Invalid threshold:",
+            "Invalid threshold:",
             "```yaml",
             "thresholds:",
             "  similarity_threshold: 1.5  # ERROR: Must be 0.0-1.0",
             "```",
             "",
-            "❌ Invalid ignore pattern:",
+            "Invalid ignore pattern:",
             "```yaml",
             "ignore:",
             "  - \"[invalid\"  # ERROR: Invalid glob pattern",
             "```",
             "",
-            "✅ VALID CONFIGURATION:",
+            "VALID CONFIGURATION:",
             "```yaml",
             "detectors:",
             "  dead_code:",

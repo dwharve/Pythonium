@@ -29,7 +29,9 @@ class OperationProfiler:
         }
         self.operations.append(operation)
         self.current_operation = operation
-        logger.info(f"🚀 Starting operation: {name} - {kwargs}")
+        # Only log if debug logging is enabled (logger has handlers)
+        if logger.handlers:
+            logger.info(f"Starting operation: {name} - {kwargs}")
     
     def checkpoint(self, checkpoint_name: str, **kwargs) -> None:
         """Add a checkpoint to the current operation."""
@@ -44,8 +46,10 @@ class OperationProfiler:
         }
         self.current_operation["checkpoints"].append(checkpoint)
         
-        elapsed_str = f"{checkpoint['elapsed']:.2f}s"
-        logger.info(f"📍 Checkpoint: {checkpoint_name} at {elapsed_str} - {kwargs}")
+        # Only log if debug logging is enabled (logger has handlers)
+        if logger.handlers:
+            elapsed_str = f"{checkpoint['elapsed']:.2f}s"
+            logger.info(f"Checkpoint: {checkpoint_name} at {elapsed_str} - {kwargs}")
     
     def end_operation(self, success: bool = True, **kwargs) -> None:
         """End the current operation."""
@@ -59,9 +63,11 @@ class OperationProfiler:
         self.current_operation["status"] = "success" if success else "failed"
         self.current_operation["result_metadata"] = kwargs
         
-        status_icon = "✅" if success else "❌"
-        duration_str = f"{self.current_operation['duration']:.2f}s"
-        logger.info(f"{status_icon} Completed operation: {self.current_operation['name']} in {duration_str} - Status: {self.current_operation['status']}")
+        # Only log if debug logging is enabled (logger has handlers)
+        if logger.handlers:
+            status_icon = "SUCCESS" if success else "FAILED"
+            duration_str = f"{self.current_operation['duration']:.2f}s"
+            logger.info(f"{status_icon} Completed operation: {self.current_operation['name']} in {duration_str} - Status: {self.current_operation['status']}")
         
         self.current_operation = None
     
@@ -141,9 +147,9 @@ def setup_debug_logging() -> None:
     file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
     
-    # Console handler for important messages
+    # Console handler for important messages - reduce verbosity
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.WARNING)  # Only show warnings and errors on console
     
     # Create formatter
     formatter = logging.Formatter(
@@ -162,31 +168,31 @@ def setup_debug_logging() -> None:
 def log_file_discovery(path: Path, files: List[Path]) -> None:
     """Log file discovery details."""
     if path.is_dir():
-        logger.info(f"📁 Discovered {len(files)} Python files in directory: {path}")
+        logger.info(f"Discovered {len(files)} Python files in directory: {path}")
         if len(files) <= 10:
             for file in files:
-                logger.debug(f"  📄 {file}")
+                logger.debug(f"  File: {file}")
         else:
-            logger.info(f"  📄 First 5 files: {[str(f) for f in files[:5]]}")
-            logger.info(f"  📄 ... and {len(files) - 5} more files")
+            logger.info(f"  First 5 files: {[str(f) for f in files[:5]]}")
+            logger.info(f"  ... and {len(files) - 5} more files")
     else:
-        logger.info(f"📄 Analyzing single file: {path}")
+        logger.info(f"Analyzing single file: {path}")
 
 def log_analyzer_creation(config: Dict[str, Any], use_cache: bool, use_parallel: bool) -> None:
     """Log analyzer creation details."""
     detector_count = len(config.get('detectors', {})) if config.get('detectors') else 'all'
-    logger.info(f"🔧 Creating analyzer - Detectors: {detector_count}, Cache: {use_cache}, Parallel: {use_parallel}")
+    logger.info(f"Creating analyzer - Detectors: {detector_count}, Cache: {use_cache}, Parallel: {use_parallel}")
     
     if config.get('detectors'):
         enabled_detectors = [d for d, settings in config['detectors'].items() if settings.get('enabled', True)]
-        logger.debug(f"🎯 Enabled detectors: {enabled_detectors}")
+        logger.debug(f"Enabled detectors: {enabled_detectors}")
 
 def log_analysis_start(files: List[Path]) -> None:
     """Log analysis start details."""
-    logger.info(f"🚀 Starting analysis of {len(files)} file(s)")
+    logger.info(f"Starting analysis of {len(files)} file(s)")
     if len(files) > 50:
-        logger.warning(f"⚠️  Large analysis scope: {len(files)} files. This may take several minutes.")
+        logger.warning(f"Large analysis scope: {len(files)} files. This may take several minutes.")
     elif len(files) > 20:
-        logger.info(f"📊 Medium analysis scope: {len(files)} files. Expected duration: 30-60 seconds.")
+        logger.info(f"Medium analysis scope: {len(files)} files. Expected duration: 30-60 seconds.")
     else:
-        logger.info(f"⚡ Small analysis scope: {len(files)} files. Expected duration: <30 seconds.")
+        logger.info(f"Small analysis scope: {len(files)} files. Expected duration: <30 seconds.")
