@@ -15,6 +15,7 @@ Features:
 
 import ast
 import hashlib
+import logging
 from collections import defaultdict, deque
 from typing import List, Dict, Tuple, Set, Optional
 from pathlib import Path
@@ -22,6 +23,7 @@ from pathlib import Path
 from ..models import CodeGraph, Issue, Symbol, Location
 from . import BaseDetector
 
+logger = logging.getLogger(__name__)
 
 class BlockCloneDetector(BaseDetector):
     """

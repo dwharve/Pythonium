@@ -22,6 +22,11 @@ class TestSecuritySmellDetector(unittest.TestCase):
         """Set up test fixtures."""
         self.detector = SecuritySmellDetector()
         self.graph = CodeGraph()
+        
+        # Clear detector cache to avoid test interference
+        from pythonium.performance import get_cache
+        cache = get_cache()
+        cache.clear_detector_issues("security_smell")
     
     def test_detector_properties(self):
         """Test detector properties and initialization."""
@@ -56,13 +61,15 @@ db_password = "database_password"
             temp_path = Path(f.name)
         
         try:
-            # Create a symbol
+            # Create a symbol and add file content to the graph
             symbol = Symbol(
                 fqname="test.hardcoded",
                 location=Location(temp_path, 1, 1),
                 ast_node=ast.parse(code_content)
             )
             self.graph.symbols["test"] = symbol
+            # Add file content to the graph so the detector can access it
+            self.graph.file_contents[str(temp_path)] = code_content
             
             issues = self.detector.analyze(self.graph)
             # Should detect multiple hardcoded credentials
@@ -98,6 +105,8 @@ def dangerous_code():
             ast_node=ast.parse(code)
         )
         self.graph.symbols["test"] = symbol
+        # Add file content to the graph so the detector can access it
+        self.graph.file_contents["test.py"] = code
         
         issues = self.detector.analyze(self.graph)
         
@@ -143,6 +152,8 @@ def weak_crypto():
                 ast_node=ast.parse(code_content)
             )
             self.graph.symbols["test"] = symbol
+            # Add file content to the graph so the detector can access it
+            self.graph.file_contents[str(temp_path)] = code_content
             
             issues = self.detector.analyze(self.graph)
             
@@ -180,6 +191,8 @@ def vulnerable_sql():
                 ast_node=ast.parse(code_content)
             )
             self.graph.symbols["test"] = symbol
+            # Add file content to the graph so the detector can access it
+            self.graph.file_contents[str(temp_path)] = code_content
             
             issues = self.detector.analyze(self.graph)
             
@@ -234,6 +247,8 @@ def non_security_function():
         self.graph.symbols["password_func"] = symbol1
         self.graph.symbols["token_func"] = symbol2
         self.graph.symbols["non_security_func"] = symbol3
+        # Add file content to the graph so the detector can access it  
+        self.graph.file_contents["test.py"] = code
         
         issues = self.detector.analyze(self.graph)
         

@@ -307,6 +307,9 @@ def long_function():
         # Create mock code graph
         graph = CodeGraph()
         graph.symbols = symbols
+        # Add file content and parsed AST to the graph
+        graph.file_contents[str(self.test_file)] = code
+        graph.parsed_files[str(self.test_file)] = tree
         
         issues = self.detector.analyze(graph)
         
@@ -599,6 +602,9 @@ def very_long_function():
         # Create mock code graph
         graph = CodeGraph()
         graph.symbols = symbols
+        # Add file content and parsed AST to the graph
+        graph.file_contents[str(test_file)] = code
+        graph.parsed_files[str(test_file)] = tree
         
         issues = self.detector.analyze(graph)
         

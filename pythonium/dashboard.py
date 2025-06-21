@@ -58,16 +58,18 @@ def _prepare_dashboard_data(issues: List[Issue], root_path: Path) -> Dict[str, A
                 issues_by_file[rel_path].append(issue)
             except ValueError:
                 # Fallback to just the filename if relative_to fails
-                issues_by_file[issue.location.file.name].append(issue)
-    # Calculate summary statistics
+                issues_by_file[issue.location.file.name].append(issue)    # Calculate summary statistics
     total_issues = len(issues)
+    multi_file_issues = [issue for issue in issues if issue.is_multi_file]
     severity_counts = {severity: len(issues_list) for severity, issues_list in issues_by_severity.items()}
     detector_counts = {detector: len(issues_list) for detector, issues_list in issues_by_detector.items()}    # Prepare file data for treemap
     file_data = []
     for file_path, file_issues in issues_by_file.items():
+        file_multi_file_issues = [issue for issue in file_issues if issue.is_multi_file]
         file_data.append({
             'name': file_path,
             'size': len(file_issues),
+            'multi_file_issues': len(file_multi_file_issues),
             'issues': [_issue_to_dict(issue, root_path_abs) for issue in file_issues]
         })
     
@@ -76,9 +78,9 @@ def _prepare_dashboard_data(issues: List[Issue], root_path: Path) -> Dict[str, A
     
     return {
         'timestamp': datetime.now().isoformat(),
-        'root_path': str(root_path),
-        'summary': {
+        'root_path': str(root_path),        'summary': {
             'total_issues': total_issues,
+            'multi_file_issues': len(multi_file_issues),
             'severity_counts': severity_counts,
             'detector_counts': detector_counts,
             'files_affected': len(issues_by_file)
@@ -98,7 +100,9 @@ def _issue_to_dict(issue: Issue, root_path: Path) -> Dict[str, Any]:
         'severity': issue.severity,
         'message': issue.message,
         'detector_id': issue.detector_id,
-        'metadata': issue.metadata or {}
+        'metadata': issue.metadata or {},
+        'is_multi_file': issue.is_multi_file,
+        'related_files': [str(f) for f in issue.related_files] if issue.related_files else []
     }
     
     if issue.location:
@@ -146,13 +150,15 @@ def _generate_html_content(data: Dict[str, Any]) -> str:
     logger.info("Template content loaded successfully, length: %d", len(template_content))
     
     # Use string.Template for safer substitution
-    template = Template(template_content)
-      # Generate file list HTML
+    template = Template(template_content)      # Generate file list HTML
     file_list_html = ""
     for file_data in data['files'][:20]:  # Show top 20 files
         severity_counts = defaultdict(int)
+        multi_file_count = 0
         for issue in file_data['issues']:
             severity_counts[issue['severity']] += 1
+            if issue.get('is_multi_file', False):
+                multi_file_count += 1
         
         # Create metric badges
         badges_html = ""
@@ -163,21 +169,28 @@ def _generate_html_content(data: Dict[str, Any]) -> str:
             badges_html += f'<span class="metric-badge warn">{warn_count} warnings</span>'
         if severity_counts.get('info', 0) > 0:
             badges_html += f'<span class="metric-badge info">{severity_counts["info"]} info</span>'
-          # Create issues detail HTML
+        if multi_file_count > 0:
+            badges_html += f'<span class="metric-badge multi-file">{multi_file_count} multi-file</span>'          # Create issues detail HTML
         issues_html = ""
         for issue in file_data['issues'][:10]:  # Show top 10 issues per file
             # Get location info safely
             location_info = issue.get('location', {})
             line_number = location_info.get('line', '?') if location_info else '?'
             
+            # Add multi-file indicator
+            multi_file_indicator = ""
+            if issue.get('is_multi_file', False):
+                multi_file_indicator = ' <span class="metric-badge multi-file">multi-file</span>'
+            
             issues_html += f"""
             <div class="issue-item {issue['severity']}">
                 <div class="issue-header">
                     <span class="issue-severity {issue['severity']}">{issue['severity'].upper()}</span>
-                    <span class="issue-location">Line {line_number}</span>
+                    <span class="issue-location">Line {line_number}{multi_file_indicator}</span>
                 </div>
                 <div class="issue-message">{issue['message']}</div>
-                <div class="issue-detector">{issue.get('detector_id', 'unknown').replace('_', ' ').title()}</div>            </div>
+                <div class="issue-detector">{issue.get('detector_id', 'unknown').replace('_', ' ').title()}</div>
+            </div>
             """
         
         file_list_html += f"""
@@ -194,6 +207,7 @@ def _generate_html_content(data: Dict[str, Any]) -> str:
             timestamp=data['timestamp'],
             total_issues=data['summary']['total_issues'],
             files_affected=data['summary']['files_affected'],
+            multi_file_issues=data['summary']['multi_file_issues'],
             error_count=data['summary']['severity_counts'].get('error', 0),
             warn_count=data['summary']['severity_counts'].get('warn', 0) + data['summary']['severity_counts'].get('warning', 0),
             info_count=data['summary']['severity_counts'].get('info', 0),

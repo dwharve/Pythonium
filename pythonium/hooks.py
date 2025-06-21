@@ -113,6 +113,38 @@ class FinishHook(Hook):
         pass
 
 
+class PreLoadHook(Hook):
+    """Hook called before loading files."""
+    
+    @abstractmethod
+    def on_pre_load(self, context: HookContext) -> None:
+        """
+        Called before file loading begins.
+        
+        Args:
+            context: Hook context with files_to_analyze metadata
+        """
+        pass
+
+
+class PostLoadHook(Hook):
+    """Hook called after loading files."""
+    
+    @abstractmethod
+    def on_post_load(self, graph: CodeGraph, context: HookContext) -> Optional[CodeGraph]:
+        """
+        Called after all files are loaded.
+        
+        Args:
+            graph: Complete code graph
+            context: Hook context
+            
+        Returns:
+            Optional modified code graph
+        """
+        pass
+
+
 class HookManager:
     """
     Manages and executes extensibility hooks.
@@ -126,6 +158,8 @@ class HookManager:
         self.file_parse_hooks: List[FileParseHook] = []
         self.issue_hooks: List[IssueHook] = []
         self.finish_hooks: List[FinishHook] = []
+        self.pre_load_hooks: List[PreLoadHook] = []
+        self.post_load_hooks: List[PostLoadHook] = []
         
         # Statistics
         self.stats = {
@@ -151,6 +185,12 @@ class HookManager:
         elif isinstance(hook, FinishHook):
             self.finish_hooks.append(hook)
             self.finish_hooks.sort(key=lambda h: h.priority)
+        elif isinstance(hook, PreLoadHook):
+            self.pre_load_hooks.append(hook)
+            self.pre_load_hooks.sort(key=lambda h: h.priority)
+        elif isinstance(hook, PostLoadHook):
+            self.post_load_hooks.append(hook)
+            self.post_load_hooks.sort(key=lambda h: h.priority)
         else:
             raise ValueError(f"Unknown hook type: {type(hook)}")
         
@@ -272,6 +312,51 @@ class HookManager:
                 logger.error("Finish hook %s failed: %s", hook.name, e)
         
         return current_issues
+    
+    def execute_pre_load_hooks(self, context: HookContext) -> None:
+        """
+        Execute pre-load hooks.
+        
+        Args:
+            context: Hook context with files_to_analyze metadata
+        """
+        for hook in self.pre_load_hooks:
+            try:
+                self.stats['hooks_executed'] += 1
+                hook.on_pre_load(context)
+                logger.debug("Executed pre-load hook: %s", hook.name)
+                
+            except Exception as e:
+                logger.error("Pre-load hook %s failed: %s", hook.name, e)
+
+    def execute_post_load_hooks(self, graph: CodeGraph, context: HookContext) -> CodeGraph:
+        """
+        Execute post-load hooks.
+        
+        Args:
+            graph: Complete code graph
+            context: Hook context
+            
+        Returns:
+            Potentially modified code graph
+        """
+        current_graph = graph
+        
+        for hook in self.post_load_hooks:
+            try:
+                self.stats['hooks_executed'] += 1
+                result = hook.on_post_load(current_graph, context)
+                
+                if result is not None:
+                    current_graph = result
+                    logger.debug("Post-load hook %s modified graph", hook.name)
+                else:
+                    logger.debug("Executed post-load hook: %s", hook.name)
+                
+            except Exception as e:
+                logger.error("Post-load hook %s failed: %s", hook.name, e)
+        
+        return current_graph
     
     def get_stats(self) -> Dict[str, Any]:
         """Get hook execution statistics."""

@@ -14,6 +14,7 @@ Features:
 """
 
 import ast
+import logging
 import re
 from collections import defaultdict, Counter
 from typing import List, Dict, Set, Tuple, Optional, Any
@@ -21,6 +22,8 @@ from pathlib import Path
 
 from ..models import CodeGraph, Issue, Symbol, Location
 from . import BaseDetector
+
+logger = logging.getLogger(__name__)
 
 
 class PatternDetector(BaseDetector):
@@ -440,25 +443,55 @@ class PatternDetector(BaseDetector):
             if self._is_factory_like(func):
                 factory_like.append(func)
         
-        # Group by similarity
-        if len(factory_like) >= 2:
-            candidates.append(factory_like)
+        # Group by class or module
+        class_groups = {}
+        for func in factory_like:
+            # Extract class name from fqname
+            parts = func.fqname.split('.')
+            if len(parts) >= 2:
+                class_key = '.'.join(parts[:-1])  # Everything except the method name
+            else:
+                class_key = 'module_level'
+            
+            if class_key not in class_groups:
+                class_groups[class_key] = []
+            class_groups[class_key].append(func)
+        
+        # Add groups that have multiple factory methods
+        for group in class_groups.values():
+            if len(group) >= 2:
+                candidates.append(group)
         
         return candidates
 
     def _is_factory_like(self, func: Symbol) -> bool:
         """Check if function is factory-like."""
-        # Look for conditional object creation
-        has_conditionals = False
-        has_returns = False
+        # Look for functions that create/return objects
+        has_object_creation = False
+        is_static_or_class_method = False
         
+        # Check if it's a static method or class method
+        if hasattr(func.ast_node, 'decorator_list'):
+            for decorator in func.ast_node.decorator_list:
+                if isinstance(decorator, ast.Name) and decorator.id in ('staticmethod', 'classmethod'):
+                    is_static_or_class_method = True
+                    break
+        
+        # Check for object creation patterns
         for node in ast.walk(func.ast_node):
-            if isinstance(node, ast.If):
-                has_conditionals = True
-            elif isinstance(node, ast.Return) and isinstance(node.value, ast.Call):
-                has_returns = True
+            if isinstance(node, ast.Return):
+                if isinstance(node.value, (ast.Dict, ast.Call)):
+                    has_object_creation = True
+                    break
+                elif isinstance(node.value, ast.Name) and node.value.id in ('self', 'cls'):
+                    has_object_creation = True
+                    break
         
-        return has_conditionals and has_returns
+        # Look for factory naming patterns
+        factory_patterns = ['create', 'make', 'build', 'construct', 'generate', 'new']
+        has_factory_name = any(pattern in func.fqname.lower() for pattern in factory_patterns)
+        
+        return (is_static_or_class_method and has_object_creation) or (has_factory_name and has_object_creation)
 
     def _detect_strategy_pattern_candidates(self, classes: List[Symbol], functions: List[Symbol]) -> List[List[Symbol]]:
         """Detect classes/functions that could benefit from strategy pattern."""

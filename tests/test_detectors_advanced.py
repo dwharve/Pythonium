@@ -159,6 +159,17 @@ class TestPatternDetector(unittest.TestCase):
         """Set up test fixtures."""
         self.detector = PatternDetector()
         self.graph = CodeGraph()
+          # Clear any cached results to ensure test isolation
+        from pythonium.performance import get_cache
+        cache = get_cache()
+        # Clear all detector cache entries for this detector
+        import sqlite3
+        try:
+            with sqlite3.connect(cache.cache_path) as conn:
+                conn.execute("DELETE FROM detector_issues WHERE detector_id = ?", (self.detector.id,))
+                conn.commit()
+        except Exception:
+            pass  # Ignore cache clearing errors in tests
     
     def test_detector_properties(self):
         """Test detector basic properties."""

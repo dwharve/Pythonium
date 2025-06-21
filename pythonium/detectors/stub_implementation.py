@@ -314,8 +314,13 @@ class StubImplementationDetector(BaseDetector):
         try:
             source_path = func.location.file
             if source_path.exists():
-                with open(source_path, 'r', encoding='utf-8') as f:
-                    lines = f.readlines()
+                # Use centralized reading with encoding fallback
+                try:
+                    with open(source_path, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()
+                except UnicodeDecodeError:
+                    with open(source_path, 'r', encoding='latin-1') as f:
+                        lines = f.readlines()
                 
                 # Check lines around the function
                 start_line = max(0, func.location.line - 1)

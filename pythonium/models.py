@@ -87,6 +87,7 @@ class Issue:
         location: Source location (optional, derived from symbol if not provided)
         detector_id: ID of the detector that found this issue
         metadata: Additional issue-specific metadata
+        related_files: List of files involved in this issue (for multi-file issues)
     """
     id: str
     severity: str
@@ -95,6 +96,7 @@ class Issue:
     location: Optional[Location] = None
     detector_id: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    related_files: List[Path] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """Initialize computed fields."""
@@ -102,9 +104,26 @@ class Issue:
         if self.location is None and self.symbol is not None:
             self.location = self.symbol.location
         
+        # Auto-detect multi-file nature from metadata and populate related_files
+        if self.metadata:
+            # Check common multi-file indicators
+            if 'locations' in self.metadata:
+                files = set()
+                for loc in self.metadata['locations']:
+                    if ':' in str(loc):
+                        file_part = str(loc).split(':')[0]
+                        files.add(file_part)
+                if len(files) > 1:
+                    self.related_files = [Path(f) for f in files]
+        
         # Validate severity
         if self.severity not in {"info", "warn", "error"}:
             raise ValueError(f"Invalid severity: {self.severity}")
+    
+    @property
+    def is_multi_file(self) -> bool:
+        """Check if this issue spans multiple files."""
+        return len(self.related_files) > 1
 
 
 @dataclass
@@ -112,15 +131,30 @@ class CodeGraph:
     """
     Represents the complete codebase as a graph of symbols and relationships.
     
-    This is the primary data structure that contains all discovered symbols
-    and their interconnections, used by detectors to perform analysis.
+    This is the primary data structure that contains all discovered symbols,
+    their interconnections, and the parsed repository of AST objects.
+    Used by detectors to perform analysis with shared parsed data.
     
     Attributes:
         symbols: Mapping from fully qualified names to Symbol objects
         modules: Mapping from module paths to sets of symbol names
+        parsed_files: Mapping from file paths to parsed AST objects
+        file_contents: Mapping from file paths to source content
+        calls: Call graph mapping callers to callees
+        inheritance: Inheritance relationships
+        imports: Import relationships between modules
     """
     symbols: Dict[str, Symbol] = field(default_factory=dict)
     modules: Dict[str, Set[str]] = field(default_factory=dict)
+    
+    # NEW: Parsed repository for shared AST access
+    parsed_files: Dict[str, ast.AST] = field(default_factory=dict)
+    file_contents: Dict[str, str] = field(default_factory=dict)
+    
+    # Relationship graphs
+    calls: Dict[str, List[str]] = field(default_factory=dict)
+    inheritance: Dict[str, List[str]] = field(default_factory=dict)
+    imports: Dict[str, List[str]] = field(default_factory=dict)
     
     def add_symbol(self, symbol: Symbol) -> None:
         """
@@ -136,6 +170,63 @@ class CodeGraph:
         if module_name not in self.modules:
             self.modules[module_name] = set()
         self.modules[module_name].add(symbol.fqname)
+    
+    def add_parsed_file(self, file_path: str, ast_tree: ast.AST, content: str) -> None:
+        """
+        Add a parsed file to the repository.
+        
+        Args:
+            file_path: Path to the file
+            ast_tree: Parsed AST object
+            content: Source content of the file
+        """
+        self.parsed_files[file_path] = ast_tree
+        self.file_contents[file_path] = content
+    
+    def get_ast(self, file_path: str) -> Optional[ast.AST]:
+        """
+        Get the parsed AST for a file.
+        
+        Args:
+            file_path: Path to the file
+            
+        Returns:
+            Parsed AST or None if not found
+        """
+        return self.parsed_files.get(file_path)
+    
+    def get_content(self, file_path: str) -> Optional[str]:
+        """
+        Get the source content for a file.
+        
+        Args:
+            file_path: Path to the file
+            
+        Returns:
+            Source content or None if not found
+        """
+        return self.file_contents.get(file_path)
+    
+    def get_all_files(self) -> List[str]:
+        """
+        Get list of all parsed files.
+        
+        Returns:
+            List of file paths in the parsed repository
+        """
+        return list(self.parsed_files.keys())
+    
+    def has_file(self, file_path: str) -> bool:
+        """
+        Check if a file is in the parsed repository.
+        
+        Args:
+            file_path: Path to check
+            
+        Returns:
+            True if file is parsed and available
+        """
+        return file_path in self.parsed_files
     
     def get_symbol(self, fqname: str) -> Optional[Symbol]:
         """
@@ -187,6 +278,35 @@ class CodeGraph:
         symbol_names = self.modules.get(module_name, set())
         return [self.symbols[name] for name in symbol_names if name in self.symbols]
     
+    def get_symbols_by_file(self, file_path: str) -> List[Symbol]:
+        """
+        Get all symbols from a specific file.
+        
+        Args:
+            file_path: Path to the file
+            
+        Returns:
+            List of symbols from the file
+        """
+        return [s for s in self.symbols.values() 
+                if s.location and str(s.location.file) == str(file_path)]
+    
+    def get_files_with_symbols(self) -> Dict[str, List[Symbol]]:
+        """
+        Group symbols by their source files.
+        
+        Returns:
+            Dictionary mapping file paths to lists of symbols
+        """
+        files_symbols = {}
+        for symbol in self.symbols.values():
+            if symbol.location and symbol.location.file:
+                file_path = str(symbol.location.file)
+                if file_path not in files_symbols:
+                    files_symbols[file_path] = []
+                files_symbols[file_path].append(symbol)
+        return files_symbols
+
     @property
     def symbol_count(self) -> int:
         """Get total number of symbols."""
@@ -196,3 +316,38 @@ class CodeGraph:
     def module_count(self) -> int:
         """Get total number of modules."""
         return len(self.modules)
+    
+    @property
+    def root_path(self) -> Optional[Path]:
+        """Get the root path of the codebase."""
+        if not self.symbols:
+            return None
+        
+        # Find common root path from all file locations
+        file_paths = []
+        for symbol in self.symbols.values():
+            if symbol.location and symbol.location.file:
+                file_paths.append(symbol.location.file)
+        
+        if not file_paths:
+            return None
+        
+        # Find common parent
+        common_path = Path(file_paths[0]).parent
+        for file_path in file_paths[1:]:
+            try:
+                # Find common parent by trying relative_to
+                current_path = Path(file_path).parent
+                while current_path != common_path:
+                    try:
+                        current_path.relative_to(common_path)
+                        break
+                    except ValueError:
+                        if common_path.parent == common_path:
+                            # Reached root, can't go higher
+                            return common_path
+                        common_path = common_path.parent
+            except Exception:
+                continue
+        
+        return common_path

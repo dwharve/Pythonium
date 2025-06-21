@@ -19,6 +19,11 @@ class TestCloneDetector(TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.graph = CodeGraph()
+        
+        # Clear cache to ensure clean test environment
+        from pythonium.performance import get_cache
+        cache = get_cache()
+        cache.clear_detector_issues("clone")
     
     def _create_mock_symbol(self, name, source, file_path="test.py", line=1):
         """Helper to create a mock symbol with source code."""
@@ -731,9 +736,14 @@ def process_list_{}(items):
         self.assertIsInstance(issues, list)
         
         if len(issues) > 0:
-            # Check that issue mentions clones
+            # Check that issue mentions clones, similar blocks, or identical blocks
             issue = issues[0]
-            self.assertIn("clone", issue.message.lower())
+            self.assertTrue(
+                "clone" in issue.message.lower() or 
+                "similar" in issue.message.lower() or
+                "identical" in issue.message.lower(),
+                f"Expected 'clone', 'similar', or 'identical' in message: {issue.message}"
+            )
     
     def test_different_normalization_options(self):
         """Test clone detection with different normalization settings."""

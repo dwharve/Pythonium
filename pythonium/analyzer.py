@@ -45,9 +45,12 @@ Example:
 """
 
 import logging
+import sqlite3
 import time
 from typing import Dict, List, Optional, Type, Union, Any
 from pathlib import Path
+import ast
+import sqlite3
 
 from .models import CodeGraph, Issue
 from .detectors import Detector, BaseDetector
@@ -215,7 +218,6 @@ class Analyzer:
         """
         if not isinstance(detector, Detector):
             raise TypeError(f"Expected a Detector instance, got {type(detector).__name__}")
-        
         detector_id = detector.id
         if detector_id in self.detectors:
             logger.warning("Detector '%s' already registered, overwriting", detector_id)
@@ -235,16 +237,8 @@ class Analyzer:
         try:
             from importlib.metadata import entry_points
             
-            # For Python 3.10+ compatibility - use select() to avoid deprecation warning
-            try:
-                detector_eps = entry_points(group='pythonium.detectors')
-            except TypeError:
-                # Fallback for older versions
-                all_eps = entry_points()
-                if hasattr(all_eps, 'select'):
-                    detector_eps = all_eps.select(group='pythonium.detectors')
-                else:
-                    detector_eps = all_eps.get('pythonium.detectors', [])
+            # Load detectors from entry points
+            detector_eps = entry_points(group='pythonium.detectors')
             
             loaded_count = 0
             for ep in detector_eps:
@@ -266,7 +260,8 @@ class Analyzer:
             if loaded_count > 0:
                 logger.info("Loaded %d external detectors", loaded_count)
                     
-        except ImportError:            logger.warning("Could not load external detectors (requires Python 3.8+)")
+        except ImportError:
+            logger.warning("Could not load external detectors (requires Python 3.8+)")
     
     def load_default_detectors(self) -> None:
         """
@@ -340,8 +335,7 @@ class Analyzer:
             List of issues found by all registered detectors
             
         Raises:
-            AnalysisError: If analysis fails
-        """
+            AnalysisError: If analysis fails        """
         start_time = time.time()
         
         try:
@@ -352,12 +346,18 @@ class Analyzer:
                 logger.info("No files to analyze")
                 return []
             
+            # Invalidate cache for changed files and their dependents
+            self._invalidate_changed_files(files_to_analyze)
+            
             # Load code into graph
             self.graph = self._load_code_with_hooks(files_to_analyze)
             
             if not self.graph.symbols:
                 logger.warning("No symbols found")
                 return []
+            
+            # Record file dependencies for cache invalidation
+            self._record_file_dependencies(files_to_analyze)
             
             # Calculate actual processed file count from the graph's file metadata
             processed_files_count = len(set(symbol.location.file for symbol in self.graph.symbols.values()))
@@ -483,8 +483,7 @@ class Analyzer:
                     else:
                         logger.info("Using incremental analysis (%d files)", len(changed_files))
                         return changed_files
-        
-        # Fall back to full analysis
+          # Fall back to full analysis
         all_files = self.loader._discover_python_files(self.root_path)
         # Filter out ignored files early to reduce noise in logs
         filtered_files = [f for f in all_files if not self.settings.is_path_ignored(f)]
@@ -497,69 +496,177 @@ class Analyzer:
         
         return filtered_files
 
-    def _load_code_with_hooks(self, files: List[Path]) -> CodeGraph:
-        """Load code with file parse hooks integration."""
+    def _load_code_with_hooks(self, files_to_analyze: List[Path]) -> CodeGraph:
+        """Load code with pre-load and post-load hooks."""
         graph = CodeGraph()
         processed_count = 0
         ignored_count = 0
         failed_count = 0
         
-        for file_path in files:
-            # Check if file should be ignored
-            if self.settings.is_path_ignored(file_path):
-                ignored_count += 1
-                continue
-            
-            try:
-                # Try to get cached symbols first
-                cached_symbols = None
-                if self.cache:
-                    cached_symbols = self.cache.get_cached_symbols(file_path)
-                
-                if cached_symbols:
-                    # Use cached symbols
-                    for symbol in cached_symbols:
-                        graph.add_symbol(symbol)
-                else:
-                    # Parse file and extract symbols
-                    ast_tree, symbols = self.loader.load_file(file_path)
-                    
-                    # Execute file parse hooks
-                    context = HookContext(analyzer=self, metadata={'file_path': file_path})
-                    all_symbols = self.hook_manager.execute_file_parse_hooks(
-                        file_path, ast_tree, symbols, context
-                    )
-                    
-                    # Add symbols to graph
-                    for symbol in all_symbols:
-                        graph.add_symbol(symbol)
-                    
-                    # Cache symbols for future use
-                    if self.cache:
-                        self.cache.cache_symbols(file_path, all_symbols)
-                
-                processed_count += 1
-                
-            except Exception as e:
-                logger.warning("Failed to process %s: %s", file_path, e)
-                failed_count += 1
+        # Pre-load hook
+        context = HookContext(analyzer=self, metadata={'files_to_analyze': files_to_analyze})
+        self.hook_manager.execute_pre_load_hooks(context)
         
-        # Provide clear summary of what happened
-        total_files = len(files)
-        if ignored_count > 0 and failed_count > 0:
-            logger.info("Processed %d files (%d ignored, %d failed)", 
-                       processed_count, ignored_count, failed_count)
-        elif ignored_count > 0:
-            logger.info("Processed %d files (%d ignored)", 
-                       processed_count, ignored_count)
-        elif failed_count > 0:
-            logger.info("Processed %d files (%d failed)", 
-                       processed_count, failed_count)
-        else:
-            logger.info("Processed %d files", processed_count)
+        # Load the code
+        self.graph = self.loader.load(files_to_analyze)
         
-        return graph
+        # Record file dependencies if caching is enabled
+        if self.cache:
+            self._record_file_dependencies(files_to_analyze)
+        
+        # Post-load hook
+        context = HookContext(analyzer=self, metadata={
+            'files_loaded': len(files_to_analyze),
+            'symbols_loaded': len(self.graph.symbols)
+        })
+        self.graph = self.hook_manager.execute_post_load_hooks(self.graph, context)
+        
+        return self.graph
 
+    def _extract_file_dependencies(self, file_path: Path) -> List[Path]:
+        """
+        Extract dependencies (imports) from a Python file.
+        
+        Args:
+            file_path: Path to the Python file
+            
+        Returns:
+            List of file paths that this file depends on
+        """
+        dependencies = []
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            tree = ast.parse(content)
+            
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        dep_path = self._resolve_import_to_file(alias.name, file_path)
+                        if dep_path and dep_path.exists():
+                            dependencies.append(dep_path)
+                
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module:
+                        dep_path = self._resolve_import_to_file(node.module, file_path)
+                        if dep_path and dep_path.exists():
+                            dependencies.append(dep_path)
+                        
+        except Exception as e:
+            logger.debug("Failed to extract dependencies from %s: %s", file_path, e)
+            
+        return dependencies
+
+    def _resolve_import_to_file(self, module_name: str, current_file: Path) -> Optional[Path]:
+        """
+        Resolve an import name to a file path.
+        
+        Args:
+            module_name: The module name to resolve (e.g., 'os.path', 'mymodule')
+            current_file: The file containing the import
+            
+        Returns:
+            Path to the imported file, or None if not found/resolvable
+        """
+        # Skip standard library modules
+        if module_name in {'os', 'sys', 'ast', 'pathlib', 'typing', 'collections', 
+                          'itertools', 'functools', 'operator', 'json', 'pickle',
+                          'sqlite3', 'logging', 'time', 'hashlib', 're', 'subprocess'}:
+            return None
+            
+        # Handle relative imports within the project
+        current_dir = current_file.parent
+        
+        # Try different resolution strategies
+        module_parts = module_name.split('.')
+        
+        # Strategy 1: Relative to current file's directory
+        potential_path = current_dir
+        for part in module_parts:
+            potential_path = potential_path / part
+        
+        # Check for .py file
+        if (potential_path.with_suffix('.py')).exists():
+            return potential_path.with_suffix('.py')
+            
+        # Check for package (__init__.py)
+        if (potential_path / '__init__.py').exists():
+            return potential_path / '__init__.py'
+        
+        # Strategy 2: Relative to project root
+        potential_path = self.root_path
+        for part in module_parts:
+            potential_path = potential_path / part
+            
+        if (potential_path.with_suffix('.py')).exists():
+            return potential_path.with_suffix('.py')
+            
+        if (potential_path / '__init__.py').exists():
+            return potential_path / '__init__.py'
+            
+        # Strategy 3: Check if it's a local module in the same directory
+        if len(module_parts) == 1:
+            local_file = current_dir / f"{module_parts[0]}.py"
+            if local_file.exists():
+                return local_file
+                
+        return None
+
+    def _record_file_dependencies(self, files_to_analyze: List[Path]) -> None:
+        """
+        Record dependencies for all files being analyzed.
+        
+        Args:
+            files_to_analyze: List of files to extract dependencies from
+        """
+        if not self.cache:
+            return
+            
+        for file_path in files_to_analyze:
+            try:
+                dependencies = self._extract_file_dependencies(file_path)
+                if dependencies:
+                    self.cache.record_file_dependencies(file_path, dependencies, 'import')
+                    logger.debug("Recorded %d dependencies for %s", len(dependencies), file_path)
+            except Exception as e:
+                logger.debug("Failed to record dependencies for %s: %s", file_path, e)
+
+    def _invalidate_changed_files(self, files_to_analyze: List[Path]) -> None:
+        """
+        Invalidate cache entries for changed files and their dependents.
+        
+        Args:
+            files_to_analyze: List of files that might have changed
+        """
+        if not self.cache:
+            return
+            
+        for file_path in files_to_analyze:
+            try:
+                # Check if file has actually changed
+                current_sha = self.cache.get_file_sha(file_path)
+                cached_symbols = self.cache.get_cached_symbols(file_path)
+                
+                if cached_symbols is not None:
+                    # File was cached, check if it changed
+                    with sqlite3.connect(self.cache.cache_path) as conn:
+                        cursor = conn.execute(
+                            "SELECT file_sha FROM file_cache WHERE file_path = ?",
+                            (str(file_path),)
+                        )
+                        row = cursor.fetchone()
+                        if row and row[0] != current_sha:
+                            # File changed, invalidate it and its dependents
+                            invalidated = self.cache.invalidate_dependents(file_path)
+                            if invalidated:
+                                logger.debug("Invalidated %d dependent files for %s", 
+                                           len(invalidated), file_path)
+                                           
+            except Exception as e:
+                logger.debug("Failed to check/invalidate %s: %s", file_path, e)
+        
     def _run_detectors_with_hooks(self) -> List[Issue]:
         """Run detectors with hooks integration."""
         if not self.graph:

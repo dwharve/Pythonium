@@ -111,10 +111,20 @@ class CloneDetector(BaseDetector):
 
     def _analyze(self, graph: CodeGraph) -> List[Issue]:
         """Analyze the code graph for clone issues."""
+        issues = []
+        
+        # Regular clone detection
         if self.exact_mode:
-            return self._detect_exact_clones(graph)
+            issues.extend(self._detect_exact_clones(graph))
         else:
-            return self._detect_near_clones(graph)
+            issues.extend(self._detect_near_clones(graph))
+        
+        # Enhanced across file semantic clone detection
+        if self.similarity_threshold < 1.0:  # Only for near-clone mode
+            semantic_issues = self._detect_semantic_clones(graph)
+            issues.extend(semantic_issues)
+        
+        return issues
 
     def _extract_meaningful_code(self, symbol) -> str:
         """Extract the meaningful code content from a symbol for clone detection.
@@ -305,14 +315,48 @@ class CloneDetector(BaseDetector):
     def _generate_fingerprint(self, source: str) -> Set[int]:
         """Generate fingerprint for near clone detection using n-grams."""
         try:
-            normalized_source = self._normalize_source(source)
+            # For fingerprinting, we always need properly tokenized source
+            # Don't use the heavily normalized version that removes all spaces
+            
+            # Apply minimal normalization for fingerprinting
+            try:
+                tree = ast.parse(source)
+                if self.ignore_docstrings:
+                    tree = self._remove_docstrings(tree)
+                normalized_source = ast.unparse(tree)
+            except:
+                normalized_source = source
+            
             if not normalized_source:
+                return set()
+            
+            # Use tokenization to get proper tokens
+            tokens = []
+            try:
+                from io import StringIO
+                token_gen = tokenize.generate_tokens(StringIO(normalized_source).readline)
+                for token in token_gen:
+                    if token.type == tokenize.NAME:  # Only use identifier tokens
+                        tokens.append(token.string)
+                    elif token.type == tokenize.NUMBER:  # Include numbers
+                        tokens.append('NUM')  # Normalize numbers for better similarity
+                    elif token.type == tokenize.STRING:  # Include strings  
+                        tokens.append('STR')  # Normalize strings for better similarity
+                    elif token.type == tokenize.OP:  # Include operators
+                        tokens.append(token.string)
+                    elif token.type == 1:  # KEYWORD (token.KEYWORD doesn't exist, use value)
+                        tokens.append(token.string)
+            except tokenize.TokenError:
+                # Fallback to simple word-based tokenization
+                import re
+                # Split on whitespace and common separators, but keep meaningful tokens
+                tokens = re.findall(r'\w+|[^\w\s]', normalized_source)
+            
+            if len(tokens) < self.ngram_size:
                 return set()
             
             # Generate n-grams
             ngrams = []
-            tokens = normalized_source.split()
-            
             for i in range(len(tokens) - self.ngram_size + 1):
                 ngram = tuple(tokens[i:i + self.ngram_size])
                 ngrams.append(hash(ngram))
@@ -460,6 +504,206 @@ class CloneDetector(BaseDetector):
             similarity=similarity,
             locations=locations,
             source_preview=source_preview
+        )
+        
+        return [issue]
+
+    def _get_structural_signature(self, symbol) -> str:
+        """Generate a structural signature for semantic comparison across files."""
+        if not symbol.ast_node:
+            return ""
+        
+        try:
+            # For functions, create a signature based on structure
+            if isinstance(symbol.ast_node, ast.FunctionDef):
+                return self._function_structural_signature(symbol.ast_node)
+            elif isinstance(symbol.ast_node, ast.ClassDef):
+                return self._class_structural_signature(symbol.ast_node)
+            else:
+                return ""
+        except Exception:
+            return ""
+    
+    def _function_structural_signature(self, func_node: ast.FunctionDef) -> str:
+        """Create structural signature for a function based on control flow and operations."""
+        signature_parts = []
+        
+        # Parameter count and types
+        signature_parts.append(f"params:{len(func_node.args.args)}")
+        
+        # Control flow structures
+        for node in ast.walk(func_node):
+            if isinstance(node, ast.If):
+                signature_parts.append("if")
+            elif isinstance(node, ast.For):
+                signature_parts.append("for")
+            elif isinstance(node, ast.While):
+                signature_parts.append("while")
+            elif isinstance(node, ast.Try):
+                signature_parts.append("try")
+            elif isinstance(node, ast.Return):
+                signature_parts.append("return")
+            elif isinstance(node, ast.Assign):
+                signature_parts.append("assign")
+            elif isinstance(node, ast.Call):
+                # Track function calls but normalize names
+                signature_parts.append("call")
+        
+        return ":".join(signature_parts)
+    
+    def _class_structural_signature(self, class_node: ast.ClassDef) -> str:
+        """Create structural signature for a class."""
+        signature_parts = []
+        
+        # Count methods and attributes
+        methods = sum(1 for node in class_node.body if isinstance(node, ast.FunctionDef))
+        attributes = sum(1 for node in class_node.body if isinstance(node, ast.Assign))
+        
+        signature_parts.append(f"methods:{methods}")
+        signature_parts.append(f"attrs:{attributes}")
+        
+        # Base classes
+        signature_parts.append(f"bases:{len(class_node.bases)}")
+        
+        return ":".join(signature_parts)
+    
+    def _detect_semantic_clones(self, graph: CodeGraph) -> List[Issue]:
+        """Detect semantic clones using structural analysis."""
+        # Group symbols by structural signature
+        signature_to_symbols = defaultdict(list)
+        
+        for symbol in graph.symbols.values():
+            if not symbol.ast_node or not symbol.location or not symbol.location.file:
+                continue
+            
+            # Only analyze functions and classes
+            if not isinstance(symbol.ast_node, (ast.FunctionDef, ast.ClassDef)):
+                continue
+            
+            try:
+                # Check min_lines requirement first
+                source_code = self._extract_meaningful_code(symbol)
+                source_lines = len(source_code.splitlines())
+                if source_lines < self.min_lines:
+                    continue
+                
+                structural_sig = self._get_structural_signature(symbol)
+                if structural_sig:
+                    signature_to_symbols[structural_sig].append(symbol)
+            except Exception:
+                continue
+        
+        # Find groups with same structural signature
+        issues = []
+        for signature, symbols in signature_to_symbols.items():
+            if len(symbols) > 1:
+                # Filter by across file requirement
+                files = set(str(s.location.file) for s in symbols if s.location and s.location.file)
+                if len(files) > 1:  # Cross-file clones only
+                    # Additional similarity check
+                    similar_groups = self._group_by_content_similarity(symbols)
+                    for group in similar_groups:
+                        if len(group) > 1:
+                            symbol_data = [(s, self._extract_meaningful_code(s)) for s in group]
+                            issues.extend(self._create_semantic_clone_issues(symbol_data, signature))
+        
+        return issues
+    
+    def _group_by_content_similarity(self, symbols: List) -> List[List]:
+        """Group symbols by content similarity within structural matches."""
+        if len(symbols) <= 1:
+            return [symbols]
+        
+        # Use simple content comparison for now
+        groups = []
+        processed = set()
+        
+        for i, symbol1 in enumerate(symbols):
+            if symbol1 in processed:
+                continue
+            
+            group = [symbol1]
+            processed.add(symbol1)
+            content1 = self._extract_meaningful_code(symbol1)
+            normalized1 = self._normalize_source(content1)
+            
+            for j, symbol2 in enumerate(symbols[i+1:], i+1):
+                if symbol2 in processed:
+                    continue
+                
+                content2 = self._extract_meaningful_code(symbol2)
+                normalized2 = self._normalize_source(content2)
+                
+                # Check content similarity
+                if self._content_similarity(normalized1, normalized2) >= self.similarity_threshold:
+                    group.append(symbol2)
+                    processed.add(symbol2)
+            
+            if len(group) > 1:
+                groups.append(group)
+        
+        return groups
+    
+    def _content_similarity(self, content1: str, content2: str) -> float:
+        """Calculate content similarity between two code blocks."""
+        if not content1 or not content2:
+            return 0.0
+        
+        # Simple token-based similarity
+        tokens1 = set(content1.split())
+        tokens2 = set(content2.split())
+        
+        if not tokens1 and not tokens2:
+            return 1.0
+        if not tokens1 or not tokens2:
+            return 0.0
+        
+        intersection = len(tokens1.intersection(tokens2))
+        union = len(tokens1.union(tokens2))
+        
+        return intersection / union if union > 0 else 0.0
+    
+    def _create_semantic_clone_issues(self, clone_group: List[Tuple], signature: str) -> List[Issue]:
+        """Create issues for semantic clone groups."""
+        if len(clone_group) < 2:
+            return []
+        
+        primary_symbol, primary_source = clone_group[0]
+        
+        # Count across file clones
+        files = set()
+        locations = []
+        for symbol, _ in clone_group:
+            if symbol.location and symbol.location.file:
+                file_path = Path(symbol.location.file)
+                files.add(str(file_path))
+                locations.append(f"{file_path.name}:{symbol.location.line}")
+        
+        # Only report if truly across files
+        if len(files) < 2:
+            return []
+        
+        # Create the issue
+        message = f"Found {len(clone_group)} semantically similar code blocks across {len(files)} files"
+        
+        source_lines = primary_source.splitlines()
+        preview_lines = source_lines[:3]
+        source_preview = '\n'.join(preview_lines)
+        if len(source_lines) > 3:
+            source_preview += '\n...'
+        
+        issue = self.create_issue(
+            issue_id="semantic-clone",
+            message=message,
+            severity="warn",
+            symbol=primary_symbol,
+            metadata={
+                "clone_count": len(clone_group),
+                "files": len(files),
+                "locations": locations,
+                "structural_signature": signature,
+                "source_preview": source_preview
+            }
         )
         
         return [issue]

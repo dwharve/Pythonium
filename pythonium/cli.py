@@ -502,26 +502,39 @@ def create_default_config(config_path: Optional[Path] = None) -> Path:
     if config_path is None:
         config_path = Path.cwd() / ".pythonium.yml"
     
-    default_config = """# Pythonium Crawler Configuration
+    default_config = """# Pythonium Crawler Configuration - Optimized Defaults
 # See https://github.com/dwharve/pythonium for full documentation
+# This configuration uses optimized settings for better detection coverage and performance
 
-# Enable/disable specific detectors with their configuration
+# Performance settings
+performance:
+  cache_enabled: true          # Enable caching for faster analysis
+  parallel: true               # Run detectors in parallel
+  cache_ttl_hours: 24         # Cache time-to-live in hours
+  max_workers: 4              # Number of parallel workers
+
+# Enable/disable specific detectors with optimized configuration
 detectors:
   dead_code:
     enabled: true
-    entry_points:
+    entry_points:              # Expanded entry points list
       - "main"
-      - "app:main"
+      - "run"
+      - "start"
+      - "app"
+      - "create_app"
+      - "wsgi_app"
+      - "application"
       - "__main__"
+    cache_enabled: true
   
   clone:
     enabled: true
-    similarity_threshold: 0.7
-    min_lines: 5
-    ignore_imports: true
-    ignore_docstrings: true
-    ignore_comments: true
-    ignore_whitespace: true
+    similarity_threshold: 0.85    # Reduced from 0.9 - better coverage
+    min_code_length: 4           # Reduced from 5 - catch smaller clones
+    exact_mode: false            # Enable near-clone detection
+    enhanced_semantic: true      # Enable enhanced semantic detection
+    cache_enabled: true
   
   inconsistent_api:
     enabled: true
@@ -529,49 +542,55 @@ detectors:
     check_parameter_order: true
     check_naming_patterns: true
     check_return_patterns: true
+    cache_enabled: true
   
   alt_implementation:
     enabled: true
-    min_similarity: 0.7
+    min_similarity: 0.8          # Slightly increased for better precision
     min_functions: 2
+    cache_enabled: true
   
   circular_deps:
     enabled: true
-    max_cycle_length: 10
-    high_fanin_threshold: 20
+    max_cycle_length: 8          # Reduced from 10 - focus on shorter cycles
+    high_fanin_threshold: 15     # Reduced from 20 - catch high dependencies
+    cache_enabled: true
   
   complexity_hotspot:
     enabled: true
-    max_complexity: 10
-    max_lines: 50
+    cyclomatic_threshold: 8      # Reduced from 10 - catch complexity earlier
+    loc_threshold: 45            # Reduced from 50 - encourage smaller functions
+    halstead_difficulty_threshold: 18.0  # Reduced for better detection
+    cache_enabled: true
   
   security_smell:
     enabled: true
-    check_hardcoded_secrets: true
-    check_dangerous_functions: true
+    check_hardcoded_credentials: true
     check_weak_crypto: true
-  
-  deprecated_api:
-    enabled: true
-    ignore_external: false
-    check_patterns: true
+    check_dangerous_functions: true
+    check_sql_injection: true
+    check_command_injection: true
+    check_insecure_random: true
+    cache_enabled: true
 
   block_clone:
     enabled: true
     min_statements: 3
-    max_statements: 20
-    similarity_threshold: 0.7
+    max_statements: 25           # Increased from 20 - analyze larger blocks
+    similarity_threshold: 0.88   # Slightly relaxed for better coverage
     ignore_variable_names: true
     ignore_string_literals: true
     ignore_numeric_literals: true
-    cross_function_only: false
+    cross_function_only: false   # Detect within and across functions
+    cache_enabled: true
     
   semantic_equivalence:
     enabled: true
     detect_builtin_equivalents: true
     detect_control_flow_equivalents: true
     detect_algorithmic_patterns: true
-    min_confidence: 0.7
+    similarity_threshold: 0.85   # Optimized threshold
+    cache_enabled: true
     
   advanced_patterns:
     enabled: true
@@ -580,31 +599,38 @@ detectors:
     detect_validation_patterns: true
     detect_factory_patterns: true
     min_pattern_size: 3
-    similarity_threshold: 0.7
+    similarity_threshold: 0.8    # Optimized threshold
     max_lines: 50
-  
-  security_smell:
-    check_hardcoded_secrets: true
-    check_dangerous_functions: true
-    check_weak_crypto: true
+    cache_enabled: true
   
   deprecated_api:
+    enabled: true
+    python_version: "3.9"        # Adjust based on your target version
     ignore_external: false
     check_patterns: true
+    cache_enabled: true
+    
+  stub_implementation:
+    enabled: true
+    check_hardcoded_returns: true
+    check_empty_implementations: true
+    check_placeholder_patterns: true
+    cache_enabled: true
 
-# Set severity levels (overrides detector defaults)
+# Set optimized severity levels (based on analysis impact)
 severity:
   dead_code: "warn"
-  clone: "error"           # High similarity clones are serious
+  clone: "warn"                  # Changed from error - less disruptive
   inconsistent_api: "warn"
   alt_implementation: "info"
-  circular_deps: "error"   # Blocks refactoring
-  complexity_hotspot: "info"
-  security_smell: "error"  # Potential vulnerabilities
+  circular_deps: "error"         # Critical architectural issue
+  complexity_hotspot: "warn"     # Changed from info - more important
+  security_smell: "error"        # Critical security issue
   deprecated_api: "warn"
-  block_clone: "error"     # Block-level clones indicate serious duplication
-  semantic_equivalence: "warn"  # Semantic equivalents suggest standardization opportunities
-  advanced_patterns: "info"     # Pattern analysis provides refactoring suggestions
+  block_clone: "warn"            # Changed from error - block clones are significant but not critical
+  semantic_equivalence: "info"   # Suggestions for improvement
+  advanced_patterns: "info"      # Refactoring suggestions
+  stub_implementation: "info"    # Development indicators
 
 # Global ignore patterns (applied to all detectors)
 ignore:

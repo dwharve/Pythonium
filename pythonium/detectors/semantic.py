@@ -16,12 +16,15 @@ Features:
 """
 
 import ast
+import logging
 from collections import defaultdict
 from typing import List, Dict, Set, Tuple, Optional, Any
 from pathlib import Path
 
 from ..models import CodeGraph, Issue, Symbol, Location
 from . import BaseDetector
+
+logger = logging.getLogger(__name__)
 
 
 class SemanticDetector(BaseDetector):

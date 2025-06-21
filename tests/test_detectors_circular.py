@@ -17,6 +17,11 @@ class TestCircularDependencyDetector(unittest.TestCase):
         """Set up test fixtures."""
         self.detector = CircularDependencyDetector()
         self.graph = CodeGraph()
+        
+        # Clear cache to ensure clean test environment
+        from pythonium.performance import get_cache
+        cache = get_cache()
+        cache.clear_detector_issues("circular_deps")
     
     def test_detector_properties(self):
         """Test detector basic properties."""

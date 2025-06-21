@@ -365,6 +365,7 @@
         .metric-badge.error { background: var(--error-color); }
         .metric-badge.warn { background: var(--warning-color); }
         .metric-badge.info { background: var(--info-color); }
+        .metric-badge.multi-file { background: var(--primary-color); }
         
         .file-issues {
             display: none;
@@ -590,6 +591,11 @@
                     <div class="stat-description">Source files containing one or more issues</div>
                 </div>
                 <div class="stat-card">
+                    <div class="stat-number">${multi_file_issues}</div>
+                    <div class="stat-label">Multi-File Issues</div>
+                    <div class="stat-description">Issues that span across multiple files</div>
+                </div>
+                <div class="stat-card">
                     <div class="stat-number">${error_count}</div>
                     <div class="stat-label">Critical Errors</div>
                     <div class="stat-description">High-priority issues requiring immediate attention</div>
@@ -632,6 +638,13 @@
             </div>
         </section>
         
+        <section id="issues" class="section">
+            <h2 class="section-title">Issue Explorer</h2>
+            <div id="issue-summary" class="chart-container">
+                <p>Click on charts or files above to explore specific issues in detail.</p>
+            </div>
+        </section>
+        
         <section id="files" class="section">
             <h2 class="section-title">File Analysis</h2>
             
@@ -643,6 +656,11 @@
                         <option value="error">Errors Only</option>
                         <option value="warn">Warnings Only</option>
                         <option value="info">Info Only</option>
+                    </select>
+                    <select id="fileTypeFilter" class="filter-select">
+                        <option value="all">All Issues</option>
+                        <option value="multi-file">Multi-File Issues</option>
+                        <option value="single-file">Single-File Issues</option>
                     </select>
                     <select id="detectorFilter" class="filter-select">
                         <option value="all">All Detectors</option>
@@ -657,18 +675,11 @@
                 ${file_list_html}
             </div>
         </section>
-        
-        <section id="issues" class="section">
-            <h2 class="section-title">Issue Explorer</h2>
-            <div id="issue-summary" class="chart-container">
-                <p>Click on charts or files above to explore specific issues in detail.</p>
-            </div>
-        </section>
     </div>
     <script>
         // Dashboard data and state management
         const dashboardData = $data_json;
-        let currentFilter = { severity: 'all', detector: 'all' };
+        let currentFilter = { severity: 'all', detector: 'all', fileType: 'all' };
         let chartInstances = {};
         
         // Utility functions
@@ -926,6 +937,7 @@
         function initializeFilters() {
             const severityFilter = document.getElementById('severityFilter');
             const detectorFilter = document.getElementById('detectorFilter');
+            const fileTypeFilter = document.getElementById('fileTypeFilter');
             
             // Populate detector filter
             const detectors = Object.keys(dashboardData.summary?.detector_counts || {});
@@ -944,6 +956,11 @@
             
             detectorFilter.addEventListener('change', (e) => {
                 currentFilter.detector = e.target.value;
+                applyFilters();
+            });
+            
+            fileTypeFilter.addEventListener('change', (e) => {
+                currentFilter.fileType = e.target.value;
                 applyFilters();
             });
         }

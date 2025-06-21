@@ -234,6 +234,7 @@ def create_user(user_type):
         tree = ast.parse(factory_code)
         symbol = MagicMock()
         symbol.ast_node = tree.body[0]
+        symbol.fqname = "create_user"  # Set the function name for pattern matching
         
         is_factory = self.detector._is_factory_like(symbol)
         self.assertTrue(is_factory)
@@ -245,6 +246,7 @@ def simple_function():
 '''
         tree = ast.parse(non_factory_code)
         symbol.ast_node = tree.body[0]
+        symbol.fqname = "simple_function"  # Set the function name
         
         is_factory = self.detector._is_factory_like(symbol)
         self.assertFalse(is_factory)

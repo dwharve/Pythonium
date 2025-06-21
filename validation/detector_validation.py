@@ -49,9 +49,11 @@ def validate_detector(detector_name: str, validation_dir: Path, verbose: bool = 
     results = {
         'detector': detector_name,
         'files_tested': 0,
+        'directories_tested': 0,
         'total_issues': 0,
         'performance': {},
         'file_results': {},
+        'directory_results': {},
         'summary': {}
     }
     
@@ -63,12 +65,15 @@ def validate_detector(detector_name: str, validation_dir: Path, verbose: bool = 
     # Find all Python files in the validation directory
     python_files = list(validation_dir.glob("*.py"))
     
-    if not python_files:
+    # Find all subdirectories (for multi-file scenarios)
+    subdirectories = [d for d in validation_dir.iterdir() if d.is_dir()]
+    
+    if not python_files and not subdirectories:
         if verbose:
-            print(f"WARNING: No Python files found in {validation_dir}")
+            print(f"WARNING: No Python files or subdirectories found in {validation_dir}")
         return results
     
-    # Create analyzer with only this detector (disable optimizations by default for clean validation)
+    # Create analyzer with only this detector
     use_cache = enable_cache
     use_parallel = enable_optimizations
     use_incremental = enable_optimizations
@@ -98,6 +103,7 @@ def validate_detector(detector_name: str, validation_dir: Path, verbose: bool = 
     
     total_start_time = time.time()
     
+    # Analyze individual files (legacy support)
     for py_file in python_files:
         file_start_time = time.time()
         
@@ -147,30 +153,97 @@ def validate_detector(detector_name: str, validation_dir: Path, verbose: bool = 
                 'issues_found': 0
             }
     
+    # Analyze subdirectories (multi-file scenarios)
+    for subdir in subdirectories:
+        dir_start_time = time.time()
+        
+        try:
+            # Find all Python files in subdirectory
+            subdir_files = list(subdir.rglob("*.py"))
+            
+            if not subdir_files:
+                continue
+                
+            # Analyze entire subdirectory
+            issues = analyzer.analyze([str(f) for f in subdir_files])
+            
+            dir_end_time = time.time()
+            dir_duration = dir_end_time - dir_start_time
+            
+            # Filter issues for this detector only
+            detector_issues = [i for i in issues if i.detector_id == detector_name]
+            
+            results['directory_results'][subdir.name] = {
+                'issues_found': len(detector_issues),
+                'analysis_time': dir_duration,
+                'files_in_directory': len(subdir_files),
+                'total_size': sum(f.stat().st_size for f in subdir_files),
+                'issues': [
+                    {
+                        'id': issue.id,
+                        'severity': issue.severity,
+                        'message': issue.message,
+                        'file': issue.location.file if issue.location else None,
+                        'line': issue.location.line if issue.location else None
+                    }
+                    for issue in detector_issues
+                ]
+            }
+            
+            results['total_issues'] += len(detector_issues)
+            results['directories_tested'] += 1
+            
+            if verbose:
+                print(f"  DIR: {subdir.name}: {len(detector_issues)} issues in {len(subdir_files)} files ({dir_duration:.3f}s)")
+                if detector_issues:
+                    for issue in detector_issues[:3]:  # Show first 3 issues
+                        file_part = f" in {Path(issue.location.file).name}" if issue.location and issue.location.file else ""
+                        print(f"    - {issue.severity}: {issue.message}{file_part}")
+                    if len(detector_issues) > 3:
+                        print(f"    ... and {len(detector_issues) - 3} more")
+        
+        except Exception as e:
+            if verbose:
+                print(f"  ERROR: Error analyzing directory {subdir.name}: {e}")
+            
+            results['directory_results'][subdir.name] = {
+                'error': str(e),
+                'analysis_time': 0,
+                'issues_found': 0
+            }
+    
     total_end_time = time.time()
     total_duration = total_end_time - total_start_time
     
     # Calculate performance metrics
+    total_analyzed = results['files_tested'] + results['directories_tested']
     results['performance'] = {
         'total_time': total_duration,
-        'avg_time_per_file': total_duration / max(results['files_tested'], 1),
+        'avg_time_per_target': total_duration / max(total_analyzed, 1),
         'issues_per_second': results['total_issues'] / max(total_duration, 0.001),
-        'files_per_second': results['files_tested'] / max(total_duration, 0.001)
+        'targets_per_second': total_analyzed / max(total_duration, 0.001)
     }
     
     # Generate summary
-    issue_counts_by_file = [
+    file_issue_counts = [
         result.get('issues_found', 0) 
         for result in results['file_results'].values()
         if 'issues_found' in result
     ]
+    dir_issue_counts = [
+        result.get('issues_found', 0) 
+        for result in results['directory_results'].values()
+        if 'issues_found' in result
+    ]
+    all_issue_counts = file_issue_counts + dir_issue_counts
     
     results['summary'] = {
-        'avg_issues_per_file': sum(issue_counts_by_file) / max(len(issue_counts_by_file), 1),
-        'max_issues_in_file': max(issue_counts_by_file) if issue_counts_by_file else 0,
-        'min_issues_in_file': min(issue_counts_by_file) if issue_counts_by_file else 0,
-        'files_with_issues': len([c for c in issue_counts_by_file if c > 0]),
-        'files_without_issues': len([c for c in issue_counts_by_file if c == 0])
+        'avg_issues_per_target': sum(all_issue_counts) / max(len(all_issue_counts), 1),
+        'max_issues_in_target': max(all_issue_counts) if all_issue_counts else 0,
+        'min_issues_in_target': min(all_issue_counts) if all_issue_counts else 0,
+        'targets_with_issues': len([c for c in all_issue_counts if c > 0]),
+        'targets_without_issues': len([c for c in all_issue_counts if c == 0]),
+        'multi_file_scenarios': results['directories_tested']
     }
     
     return results
@@ -313,16 +386,26 @@ def main():
         }
         
         # Print summary for this detector
-        if results['files_tested'] > 0:
-            print(f"SUCCESS: {detector_name}: {results['total_issues']} issues in {results['files_tested']} files "
-                  f"({results['performance']['total_time']:.2f}s)")
+        total_targets = results['files_tested'] + results['directories_tested']
+        if total_targets > 0:
+            targets_desc = []
+            if results['files_tested'] > 0:
+                targets_desc.append(f"{results['files_tested']} files")
+            if results['directories_tested'] > 0:
+                targets_desc.append(f"{results['directories_tested']} directories")
+            
+            targets_str = " + ".join(targets_desc)
+            multi_file_note = f" (includes {results['directories_tested']} multi-file scenarios)" if results['directories_tested'] > 0 else ""
+            
+            print(f"SUCCESS: {detector_name}: {results['total_issues']} issues in {targets_str} "
+                  f"({results['performance']['total_time']:.2f}s){multi_file_note}")
             
             if effectiveness['recommendations']:
                 print(f"Recommendations:")
                 for rec in effectiveness['recommendations'][:2]:  # Show first 2
                     print(f"   - {rec}")
         else:
-            print(f"WARNING: {detector_name}: No files tested")
+            print(f"WARNING: {detector_name}: No files or directories tested")
         
         if args.verbose:
             print()
@@ -332,14 +415,23 @@ def main():
     
     # Generate overall summary
     total_files = sum(r['validation_results']['files_tested'] for r in all_results.values())
+    total_directories = sum(r['validation_results']['directories_tested'] for r in all_results.values())
     total_issues = sum(r['validation_results']['total_issues'] for r in all_results.values())
     
     print(f"\nOverall Summary:")
     print(f"   Total detectors validated: {len(all_results)}")
     print(f"   Total files analyzed: {total_files}")
+    print(f"   Total directories analyzed: {total_directories}")
+    print(f"   Total multi-file scenarios: {total_directories}")
     print(f"   Total issues found: {total_issues}")
     print(f"   Total validation time: {total_duration:.2f}s")
     print(f"   Average issues per detector: {total_issues / max(len(all_results), 1):.1f}")
+    
+    # Summary of multi-file testing
+    detectors_with_multi_file = len([r for r in all_results.values() if r['validation_results']['directories_tested'] > 0])
+    if detectors_with_multi_file > 0:
+        print(f"   Detectors with multi-file scenarios: {detectors_with_multi_file}")
+        print(f"   Average multi-file scenarios per detector: {total_directories / max(len(all_results), 1):.1f}")
     
     # Save results to file if requested
     if args.output:
@@ -368,10 +460,13 @@ def generate_markdown_report(results: Dict[str, Any], output_path: Path):
         f.write("## Overall Summary\n\n")
         total_detectors = len(results)
         total_files = sum(r['validation_results']['files_tested'] for r in results.values())
+        total_directories = sum(r['validation_results']['directories_tested'] for r in results.values())
         total_issues = sum(r['validation_results']['total_issues'] for r in results.values())
         
         f.write(f"- **Detectors Validated**: {total_detectors}\n")
         f.write(f"- **Total Files Analyzed**: {total_files}\n")
+        f.write(f"- **Total Directories Analyzed**: {total_directories}\n")
+        f.write(f"- **Multi-File Scenarios**: {total_directories}\n")
         f.write(f"- **Total Issues Found**: {total_issues}\n")
         f.write(f"- **Average Issues per Detector**: {total_issues / max(total_detectors, 1):.1f}\n\n")
         
@@ -386,13 +481,15 @@ def generate_markdown_report(results: Dict[str, Any], output_path: Path):
             
             # Basic stats
             f.write(f"- **Files Tested**: {validation['files_tested']}\n")
+            f.write(f"- **Directories Tested**: {validation['directories_tested']}\n")
+            f.write(f"- **Multi-File Scenarios**: {validation['directories_tested']}\n")
             f.write(f"- **Issues Found**: {validation['total_issues']}\n")
             f.write(f"- **Analysis Time**: {validation['performance']['total_time']:.2f}s\n")
             f.write(f"- **Issues per Second**: {validation['performance']['issues_per_second']:.1f}\n\n")
             
             # File breakdown
             if validation['file_results']:
-                f.write("#### File Results\n\n")
+                f.write("#### Individual File Results\n\n")
                 f.write("| File | Issues | Time (s) | Size (bytes) |\n")
                 f.write("|------|--------|----------|-------------|\n")
                 
@@ -401,6 +498,36 @@ def generate_markdown_report(results: Dict[str, Any], output_path: Path):
                     time_taken = file_result.get('analysis_time', 0)
                     size = file_result.get('file_size', 0)
                     f.write(f"| {filename} | {issues} | {time_taken:.3f} | {size} |\n")
+                
+                f.write("\n")
+            
+            # Directory breakdown  
+            if validation['directory_results']:
+                f.write("#### Multi-File Scenario Results\n\n")
+                f.write("| Directory | Issues | Files | Time (s) | Total Size (bytes) |\n")
+                f.write("|-----------|--------|-------|----------|-----------------|\n")
+                
+                for dirname, dir_result in validation['directory_results'].items():
+                    issues = dir_result.get('issues_found', 0)
+                    files = dir_result.get('files_in_directory', 0)
+                    time_taken = dir_result.get('analysis_time', 0)
+                    size = dir_result.get('total_size', 0)
+                    f.write(f"| {dirname} | {issues} | {files} | {time_taken:.3f} | {size} |\n")
+                
+                f.write("\n")
+            
+            # Directory breakdown
+            if validation['directory_results']:
+                f.write("#### Directory Results\n\n")
+                f.write("| Directory | Issues | Time (s) | Files | Total Size (bytes) |\n")
+                f.write("|-----------|--------|----------|-------|-------------------|\n")
+                
+                for dir_name, dir_result in validation['directory_results'].items():
+                    issues = dir_result.get('issues_found', 0)
+                    time_taken = dir_result.get('analysis_time', 0)
+                    file_count = dir_result.get('files_in_directory', 0)
+                    total_size = dir_result.get('total_size', 0)
+                    f.write(f"| {dir_name} | {issues} | {time_taken:.3f} | {file_count} | {total_size} |\n")
                 
                 f.write("\n")
             

@@ -47,34 +47,33 @@ class ComplexityDetector(BaseDetector):
         self.cyclomatic_threshold = cyclomatic_threshold
         self.loc_threshold = loc_threshold
         self.halstead_difficulty_threshold = halstead_difficulty_threshold
-    
+          
     def _analyze(self, graph: CodeGraph) -> List[Issue]:
-        """Find complexity hotspots in the codebase."""
+        """Find complexity hotspots using the parsed repository."""
+        if not RADON_AVAILABLE:
+            logger.warning("Radon not available, skipping complexity analysis")
+            return []
+        
         issues = []
         
-        # Group symbols by file for batch processing
-        files_symbols = {}
-        for symbol in graph.symbols.values():
-            if (symbol.location and symbol.location.file and 
-                isinstance(symbol.ast_node, ast.FunctionDef)):
-                
-                file_path = symbol.location.file
-                if file_path not in files_symbols:
-                    files_symbols[file_path] = []
-                files_symbols[file_path].append(symbol)
-        
-        # Analyze each file
-        for file_path, symbols in files_symbols.items():
+        # Use parsed repository instead of re-parsing files
+        for file_path, ast_tree in graph.parsed_files.items():
             try:
-                # Read the file for radon analysis
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                  # Perform complexity analysis
-                file_issues = self._analyze_file_complexity(content, symbols, file_path)
+                # Get content from parsed repository
+                content = graph.get_content(file_path)
+                if content is None:
+                    logger.warning("No content found for %s", file_path)
+                    continue
+                
+                # Get symbols for this file
+                file_symbols = graph.get_symbols_by_file(file_path)
+                
+                # Analyze complexity using the pre-parsed AST and content
+                file_issues = self._analyze_file_complexity(content, file_symbols, Path(file_path))
                 issues.extend(file_issues)
                 
             except Exception as e:
-                pass
+                logger.error("Error analyzing complexity in %s: %s", file_path, e)
         
         return issues
     

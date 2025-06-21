@@ -94,8 +94,7 @@ class InconsistentApiDetector(BaseDetector):
         Args:
             check_parameter_order: Whether to analyze parameter order consistency
             check_naming_patterns: Whether to analyze naming pattern consistency
-            check_return_patterns: Whether to analyze return pattern consistency
-            min_functions_for_pattern: Minimum number of functions required to
+            check_return_patterns: Whether to analyze return pattern consistency            min_functions_for_pattern: Minimum number of functions required to
             establish a pattern for comparison
         """
         super().__init__(**options)
@@ -110,8 +109,7 @@ class InconsistentApiDetector(BaseDetector):
         
         Args:
             graph: The code graph to analyze
-            
-        Returns:
+              Returns:
             List of issues representing API inconsistencies
         """
         if not graph.symbols:

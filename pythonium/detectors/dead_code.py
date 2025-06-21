@@ -78,9 +78,8 @@ class DeadCodeDetector(BaseDetector):
             "**/tests/**",
             "**/test_*.py",
             "**/conftest.py",
-            "**/__init__.py",
-        ])
-    
+            "**/__init__.py",        ])
+
     def _analyze(self, graph: CodeGraph) -> List[Issue]:
         """
         Analyze the code graph for dead code.

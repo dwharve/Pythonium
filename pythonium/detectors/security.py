@@ -120,8 +120,7 @@ class SecuritySmellDetector(BaseDetector):
         self.sql_injection_patterns = [
             re.compile(r'(?i)execute\s*\(\s*["\'][^"\']*%[sd][^"\']*["\']'),
             re.compile(r'(?i)execute\s*\(\s*f["\'][^"\']*{[^}]+}[^"\']*["\']'),
-            re.compile(r'(?i)(select|insert|update|delete).*\+.*["\']'),
-        ]
+            re.compile(r'(?i)(select|insert|update|delete).*\+.*["\']'),        ]
     
     def _analyze(self, graph: CodeGraph) -> List[Issue]:
         """Find security smells in the codebase."""
@@ -138,21 +137,16 @@ class SecuritySmellDetector(BaseDetector):
         
         # Analyze each file
         for file_path, symbols in files_symbols.items():
-            try:
-                # Read the file for pattern matching
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                
-                # Perform security analysis
-                file_issues = self._analyze_file_security(content, symbols, file_path)
-                issues.extend(file_issues)
-                
-            except Exception as e:
-                # If file can't be read, still perform AST-based checks
-                ast_issues = []
-                ast_issues.extend(self._check_dangerous_functions(symbols))
-                ast_issues.extend(self._check_insecure_random(symbols))
-                issues.extend(ast_issues)
+            # Use content from the shared repository
+            content = self.get_file_content(graph, file_path)
+            if content is None:
+                # Skip analysis if content not available - no fallback logic
+                logger.debug("Skipping security analysis for %s - no file content available", file_path)
+                continue
+            
+            # Perform security analysis
+            file_issues = self._analyze_file_security(content, symbols, file_path)
+            issues.extend(file_issues)
         
         return issues
     

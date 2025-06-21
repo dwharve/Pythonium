@@ -17,9 +17,9 @@ class TestSettings(unittest.TestCase):
         settings = Settings()
         
         # Check default thresholds
-        self.assertEqual(settings.thresholds['complexity_cyclomatic'], 10)
-        self.assertEqual(settings.thresholds['clone_similarity'], 0.9)
-        self.assertEqual(settings.thresholds['clone_min_lines'], 5)
+        self.assertEqual(settings.thresholds['complexity_cyclomatic'], 8)  # Updated optimized threshold
+        self.assertEqual(settings.thresholds['clone_similarity'], 0.85)  # Updated optimized threshold
+        self.assertEqual(settings.thresholds['clone_min_lines'], 4)  # Updated optimized threshold
         
         # Check default ignored paths
         self.assertIn('**/tests/**', settings.ignored_paths)

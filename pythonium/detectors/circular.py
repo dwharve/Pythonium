@@ -85,11 +85,11 @@ class CircularDependencyDetector(BaseDetector):
                  **options):
         """
         Initialize the circular dependency detector.
-          Args:
+        
+        Args:
             max_cycle_length: Maximum length of dependency cycles to report.
                              Longer cycles are often less problematic.
-            high_fanin_threshold: Number of incoming dependencies above which
-                                 a module is considered to have high fan-in.
+            high_fanin_threshold: Number of incoming dependencies above which                                 a module is considered to have high fan-in.
         """
         super().__init__(**options)
         self.max_cycle_length = max_cycle_length

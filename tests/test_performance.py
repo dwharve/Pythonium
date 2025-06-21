@@ -108,7 +108,7 @@ class TestAnalysisCache(unittest.TestCase):
         self.assertIsNone(cached_symbols)
     
     def test_cache_and_retrieve_symbols(self):
-        """Test caching and retrieving symbols."""
+        """Test symbol caching (deprecated - now returns None to force AST-based extraction)."""
         # Create test symbols
         symbols = [
             Symbol(
@@ -118,26 +118,24 @@ class TestAnalysisCache(unittest.TestCase):
             )
         ]
         
-        # Cache the symbols
+        # Cache the symbols (no-op in new architecture)
         self.cache.cache_symbols(self.test_file, symbols)
         
-        # Retrieve cached symbols
+        # Retrieve cached symbols (returns None to force AST extraction)
         cached_symbols = self.cache.get_cached_symbols(self.test_file)
-        self.assertIsNotNone(cached_symbols)
-        self.assertEqual(len(cached_symbols), 1)
-        self.assertEqual(cached_symbols[0].fqname, "test_function")
+        self.assertIsNone(cached_symbols)  # New behavior - forces AST-based extraction
     
     def test_cache_invalidation_on_modification(self):
-        """Test that cache is invalidated when file is modified."""
+        """Test cache behavior (symbol caching deprecated - returns None)."""
         # Create test symbols
         symbols = [Symbol(fqname="test", location=Location(self.test_file, 1, 1), ast_node=None)]
         
-        # Cache the symbols
+        # Cache the symbols (no-op in new architecture)
         self.cache.cache_symbols(self.test_file, symbols)
         
-        # Verify cached
+        # Verify cached (returns None in new architecture)
         cached = self.cache.get_cached_symbols(self.test_file)
-        self.assertIsNotNone(cached)
+        self.assertIsNone(cached)  # New behavior - symbol caching is deprecated
         
         # Modify the file
         time.sleep(0.1)  # Ensure timestamp difference
@@ -304,20 +302,37 @@ class TestParallelAnalyzer(unittest.TestCase):
         """Test parallel analysis with slow detector."""
         analyzer = ParallelAnalyzer(max_workers=1)
         
-        # Create a mock graph
+        # Create a mock graph with some content
         graph = CodeGraph()
         
-        # Create a slow detector
-        slow_detector = MockDetector(delay=0.1)  # Small delay for testing
+        # Add some symbols and content to the graph
+        test_path = Path("test.py")
+        symbol = Symbol(
+            fqname="test.test_func",
+            ast_node=None,  # Not needed for this test
+            location=Location(file=test_path, line=1)
+        )
+        graph.symbols["test.test_func"] = symbol
+        graph.file_contents[str(test_path)] = "def test_func(): pass"
         
-        # Run analysis and measure time
-        start_time = time.time()
+        # Create a slow detector with a flag to verify it was called
+        class CallableDetector(MockDetector):
+            def __init__(self):
+                super().__init__(delay=0.05)  # Small but measurable delay
+                self.was_called = False
+                
+            def _analyze(self, graph):
+                self.was_called = True
+                return super()._analyze(graph)
+        
+        slow_detector = CallableDetector()
+        
+        # Run analysis
         results = analyzer.analyze_parallel([slow_detector], graph)
-        elapsed_time = time.time() - start_time
         
         self.assertIsInstance(results, list)
-        # Should complete, time will vary
-        self.assertGreater(elapsed_time, 0)
+        # Verify the detector was actually called
+        self.assertTrue(slow_detector.was_called, "Detector should have been called")
     
     def test_analyze_empty_detector_list(self):
         """Test parallel analysis with empty detector list."""

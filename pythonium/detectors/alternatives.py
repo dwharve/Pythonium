@@ -6,6 +6,7 @@ clusters by popularity spread to spot real competition vs. deprecated code.
 """
 
 import ast
+import logging
 import re
 from collections import Counter, defaultdict
 from math import log, sqrt
@@ -14,6 +15,8 @@ from typing import Any, Dict, List, Set, Tuple
 
 from ..models import CodeGraph, Issue, Symbol
 from . import BaseDetector
+
+logger = logging.getLogger(__name__)
 
 
 class AltImplementationDetector(BaseDetector):
@@ -32,9 +35,10 @@ class AltImplementationDetector(BaseDetector):
                            "consolidated to reduce code duplication and maintenance overhead.")
     
     def __init__(self, 
-                 semantic_threshold: float = 0.4,
-                 pattern_threshold: float = 0.7,
-                 min_docstring_length: int = 10,                 **options):
+                 semantic_threshold: float = 0.8,      # Increased from 0.4 - better precision
+                 pattern_threshold: float = 0.8,       # Increased from 0.7 - better precision
+                 min_docstring_length: int = 10,
+                 **options):
         super().__init__(**options)
         self.semantic_threshold = semantic_threshold
         self.pattern_threshold = pattern_threshold
