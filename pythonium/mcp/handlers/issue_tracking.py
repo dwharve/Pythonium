@@ -511,3 +511,155 @@ class IssueTrackingHandlers(BaseHandler):
                 ]
             )
             return [self.response_formatter.to_text_content(response_data)]
+    
+    @profile_operation("get_next_issue_to_work")
+    async def get_next_issue_to_work(self, arguments: Dict[str, Any]) -> List[types.TextContent]:
+        """Get details of the next issue that needs to be worked on."""
+        from ..issue_tracking import IssueStatus, IssueClassification
+        
+        project_path = arguments.get("project_path")
+        priority_order = arguments.get("priority_order", ["unclassified", "pending", "work_in_progress"])
+        include_suppressed = arguments.get("include_suppressed", False)
+        
+        # Parse priority order
+        parsed_priority = []
+        for status_str in priority_order:
+            if status_str == "unclassified":
+                parsed_priority.append(IssueClassification.UNCLASSIFIED)
+            elif status_str in ["pending", "work_in_progress"]:
+                try:
+                    parsed_priority.append(IssueStatus(status_str))
+                except ValueError:
+                    continue
+        
+        # Get trackers to query
+        trackers_to_query = []
+        if project_path:
+            # Query specific project
+            project_root = Path(project_path).resolve()
+            tracker = self._get_issue_tracker(project_root)
+            trackers_to_query = [tracker]
+        else:
+            # Query all tracked projects
+            trackers_to_query = list(self._issue_trackers.values())
+        
+        if not trackers_to_query:
+            response_data = self.response_formatter.format_error(
+                error_message="No tracked projects found",
+                error_type="no_projects",
+                recovery_suggestions=[
+                    ActionSuggestion(
+                        action="analyze_code",
+                        description="Run code analysis on a project to start tracking issues",
+                        tool_call="analyze_code",
+                        priority="high"
+                    )
+                ]
+            )
+            return [self.response_formatter.to_text_content(response_data)]
+
+        # Collect all issues and find the next one to work on
+        next_issue = None
+        
+        for priority_item in parsed_priority:
+            for tracker in trackers_to_query:
+                try:
+                    if isinstance(priority_item, IssueClassification):
+                        # Look for issues with this classification
+                        issues = tracker.list_issues(
+                            classification=priority_item,
+                            include_suppressed=include_suppressed
+                        )
+                    elif isinstance(priority_item, IssueStatus):
+                        # Look for issues with this status
+                        issues = tracker.list_issues(
+                            status=priority_item,
+                            include_suppressed=include_suppressed
+                        )
+                    else:
+                        continue
+                    
+                    if issues:
+                        # Return the first issue found in priority order
+                        next_issue = issues[0]
+                        break
+                        
+                except Exception as e:
+                    # Skip this tracker and continue
+                    continue
+            
+            if next_issue:
+                break
+        
+        if not next_issue:
+            response_data = self.response_formatter.format_error(
+                error_message="No actionable issues found",
+                error_type="no_actionable_issues",
+                recovery_suggestions=[
+                    ActionSuggestion(
+                        action="analyze_code",
+                        description="Run code analysis to find new issues",
+                        tool_call="analyze_code",
+                        priority="medium"
+                    ),
+                    ActionSuggestion(
+                        action="list_tracked_issues", 
+                        description="List all tracked issues to see what's available",
+                        tool_call="list_tracked_issues",
+                        priority="low"
+                    )
+                ]
+            )
+            return [self.response_formatter.to_text_content(response_data)]
+        
+        # Format the next issue details
+        original = next_issue.original_issue
+        issue_data = {
+            "issue_hash": next_issue.issue_hash,
+            "classification": next_issue.classification.value,
+            "status": next_issue.status.value,
+            "notes": next_issue.notes,
+            "assigned_to": next_issue.assigned_to,
+            "first_seen": next_issue.first_seen.isoformat(),
+            "last_seen": next_issue.last_seen.isoformat(),
+            "suppressed": next_issue.suppressed
+        }
+        
+        # Add original issue details if available
+        if original:
+            issue_data.update({
+                "message": original.message,
+                "detector_id": original.detector_id,
+                "severity": original.severity,
+                "symbol": original.symbol,
+                "file_path": str(original.location.file) if original.location else None,
+                "line_number": original.location.line if original.location else None,
+                "column": original.location.column if original.location else None,
+                "metadata": original.metadata or {}
+            })
+        
+        # Create a manual response
+        response_text = f"**Next Issue to Work On**\n\n"
+        response_text += f"Issue Hash: `{next_issue.issue_hash}`\n"
+        if original:
+            response_text += f"Message: {original.message}\n"
+            response_text += f"Detector: {original.detector_id}\n"
+            response_text += f"Severity: {original.severity}\n"
+            if original.location:
+                response_text += f"File: {original.location.file}\n"
+                response_text += f"Line: {original.location.line}\n"
+        
+        response_text += f"Classification: {next_issue.classification.value}\n"
+        response_text += f"Status: {next_issue.status.value}\n"
+        
+        if next_issue.notes:
+            response_text += f"Notes: {next_issue.notes}\n"
+        if next_issue.assigned_to:
+            response_text += f"Assigned To: {next_issue.assigned_to}\n"
+            
+        response_text += f"\nSuggested Actions:\n"
+        response_text += f"   • Use `investigate_issue` with hash `{next_issue.issue_hash}` to analyze this issue\n"
+        response_text += f"   • Use `mark_issue` to classify or update status\n"
+        response_text += f"   • Use `get_issue_info` for detailed information\n"
+        
+        return [types.TextContent(type="text", text=response_text)]

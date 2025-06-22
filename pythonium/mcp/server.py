@@ -157,6 +157,8 @@ class PythoniumMCPServer:
                     return await self.handlers.get_agent_actions(arguments)
                 elif name == "investigate_issue":
                     return await self.handlers.investigate_issue(arguments)
+                elif name == "get_next_issue_to_work":
+                    return await self.handlers.get_next_issue_to_work(arguments)
                 elif name == "repair_python_syntax":
                     return await self.handlers.repair_python_syntax(arguments)
                 else:

@@ -1,18 +1,23 @@
 """
-Sophisticated Python syntax analysis and repair functionality.
+High-performance Python syntax analysis and repair functionality.
 
-This module provides advanced capabilities for detecting and automatically
-fixing Python syntax errors including indentation issues, missing colons,
-unmatched brackets, and other common syntax problems.
+This module provides optimized capabilities for detecting and automatically
+fixing Python syntax errors with special focus on common issues like:
+- Indentation errors (off by a few spaces/tabs)
+- Missing newlines causing two lines to be merged
+- Other common syntax problems
+
+The implementation uses fast-path detection for common cases to maximize performance.
 """
 
 import ast
 import re
 import tokenize
 import io
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Optional, Dict, Any, Set
 from pathlib import Path
 import logging
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +35,43 @@ class PythonSyntaxError:
         return f"Line {self.line_no}, Column {self.column}: {self.message}"
 
 
-class SyntaxRepairEngine:
+class OptimizedSyntaxRepairEngine:
     """
-    Advanced Python syntax repair engine that can detect and fix various
-    types of syntax errors automatically.
+    High-performance Python syntax repair engine optimized for common cases.
+    
+    This engine uses a two-tier approach:
+    1. Fast-path detection and repair for common issues (indentation, newlines)
+    2. Fallback to comprehensive repair strategies for complex cases
     """
     
     def __init__(self):
-        self.repair_strategies = [
+        # Cache for parsed code to avoid repeated AST parsing
+        self._parse_cache = {}
+        self._error_cache = {}
+        
+        # Fast-path patterns for common issues
+        self._indent_patterns = {
+            'missing_indent': re.compile(r'^(\s*)(def|class|if|elif|else|for|while|try|except|finally|with)\s.*:$', re.MULTILINE),
+            'extra_indent': re.compile(r'^(\s{5,})(\S.*)', re.MULTILINE),  # 5+ spaces might be wrong indent
+            'mixed_indent': re.compile(r'^(\t+ +| +\t+)', re.MULTILINE),  # Mixed tabs and spaces
+        }
+        
+        # Patterns for detecting merged lines
+        self._merged_line_patterns = [
+            re.compile(r':\s*\w'),  # colon followed immediately by code (should be newline)
+            re.compile(r'(def|class|if|elif|else|for|while|try|except|finally|with)\s+[^:]*:\s*\w+'),
+            re.compile(r'^\s*import\s+\w+\s+\w+'),  # Multiple statements on import line
+        ]
+        
+        # Lightweight repair strategies (fast-path)
+        self.fast_strategies = [
+            self._fast_fix_indentation,
+            self._fast_fix_merged_lines,
+            self._fast_fix_missing_colons,
+        ]
+        
+        # Comprehensive repair strategies (fallback)
+        self.comprehensive_strategies = [
             self._fix_indentation_errors,
             self._fix_missing_colons,
             self._fix_unmatched_brackets,
@@ -51,6 +85,7 @@ class SyntaxRepairEngine:
     def analyze_and_repair(self, code: str, max_attempts: int = 5) -> Dict[str, Any]:
         """
         Analyze Python code for syntax errors and attempt to repair them.
+        Uses optimized fast-path detection for common issues.
         
         Args:
             code: Python source code as string
@@ -63,26 +98,48 @@ class SyntaxRepairEngine:
             - original_errors: List of errors found in original code
             - attempts: List of repair attempts made
             - final_errors: Any remaining errors after repair attempts
+            - fast_path_used: Whether fast-path optimization was used
         """
         original_code = code
         current_code = code
         attempts = []
+        fast_path_used = False
         
-        # Analyze original code
-        original_errors = self._analyze_syntax_errors(original_code)
-        
-        if not original_errors:
+        # Quick validation - check if code is already valid
+        if self._is_valid_python(original_code):
             return {
                 "success": True,
                 "fixed_code": original_code,
                 "original_errors": [],
                 "attempts": [],
                 "final_errors": [],
+                "fast_path_used": False,
                 "message": "No syntax errors found in original code"
             }
         
-        # Attempt repairs
-        for attempt in range(max_attempts):
+        # Analyze original code for errors
+        original_errors = self._analyze_syntax_errors(original_code)
+        
+        # Try fast-path repairs first for common issues
+        fast_path_result = self._try_fast_path_repairs(current_code, original_errors)
+        if fast_path_result["success"]:
+            return {
+                "success": True,
+                "fixed_code": fast_path_result["fixed_code"],
+                "original_errors": [str(e) for e in original_errors],
+                "attempts": fast_path_result["attempts"],
+                "final_errors": [],
+                "fast_path_used": True,
+                "message": f"Successfully fixed all syntax errors using fast-path optimization in {len(fast_path_result['attempts'])} attempt(s)"
+            }
+        elif fast_path_result["fixed_code"] != current_code:
+            # Fast path made some progress, continue with the improved code
+            current_code = fast_path_result["fixed_code"]
+            attempts.extend(fast_path_result["attempts"])
+            fast_path_used = True
+        
+        # Fallback to comprehensive repair strategies
+        for attempt in range(max_attempts - len(attempts)):
             errors = self._analyze_syntax_errors(current_code)
             
             if not errors:
@@ -92,16 +149,17 @@ class SyntaxRepairEngine:
                     "original_errors": [str(e) for e in original_errors],
                     "attempts": attempts,
                     "final_errors": [],
-                    "message": f"Successfully fixed all syntax errors in {attempt + 1} attempt(s)"
+                    "fast_path_used": fast_path_used,
+                    "message": f"Successfully fixed all syntax errors in {len(attempts)} attempt(s)"
                 }
             
-            # Try to fix the first error
-            fixed_code = self._attempt_repair(current_code, errors[0])
+            # Try to fix the first error using comprehensive strategies
+            fixed_code = self._attempt_comprehensive_repair(current_code, errors[0])
             
             if fixed_code == current_code:
-                # No changes made, try next strategy or give up
+                # No changes made, give up
                 attempts.append({
-                    "attempt": attempt + 1,
+                    "attempt": len(attempts) + 1,
                     "error": str(errors[0]),
                     "strategy": "no_applicable_strategy",
                     "success": False
@@ -109,9 +167,9 @@ class SyntaxRepairEngine:
                 break
             
             attempts.append({
-                "attempt": attempt + 1,
+                "attempt": len(attempts) + 1,
                 "error": str(errors[0]),
-                "strategy": "applied_fix",
+                "strategy": "comprehensive_repair",
                 "success": True,
                 "changes_made": True
             })
@@ -127,16 +185,292 @@ class SyntaxRepairEngine:
             "original_errors": [str(e) for e in original_errors],
             "attempts": attempts,
             "final_errors": [str(e) for e in final_errors],
+            "fast_path_used": fast_path_used,
             "message": f"Unable to fix all syntax errors after {max_attempts} attempts"
         }
+    @lru_cache(maxsize=100)
+    def _is_valid_python(self, code: str) -> bool:
+        """Fast check if code is already valid Python."""
+        try:
+            ast.parse(code)
+            return True
+        except:
+            return False
+    
+    def _try_fast_path_repairs(self, code: str, errors: List[PythonSyntaxError]) -> Dict[str, Any]:
+        """Try fast-path repairs for common issues."""
+        current_code = code
+        attempts = []
+        
+        for strategy in self.fast_strategies:
+            try:
+                fixed_code = strategy(current_code, errors)
+                if fixed_code != current_code:
+                    attempts.append({
+                        "attempt": len(attempts) + 1,
+                        "strategy": strategy.__name__,
+                        "success": True,
+                        "fast_path": True
+                    })
+                    current_code = fixed_code
+                    
+                    # Check if we've fixed all issues
+                    if self._is_valid_python(current_code):
+                        return {
+                            "success": True,
+                            "fixed_code": current_code,
+                            "attempts": attempts
+                        }
+            except Exception as e:
+                logger.debug(f"Fast-path strategy {strategy.__name__} failed: {e}")
+        
+        return {
+            "success": False,
+            "fixed_code": current_code,
+            "attempts": attempts
+        }
+    
+    def _fast_fix_indentation(self, code: str, errors: List[PythonSyntaxError]) -> str:
+        """Fast fix for simple indentation errors with proper scope tracking."""
+        # Check if any errors are indentation-related or return outside function
+        has_indent_error = any(
+            "indent" in error.message.lower() or 
+            "expected an indented block" in error.message or
+            "unindent does not match" in error.message or
+            "return" in error.message.lower() and "outside function" in error.message.lower()
+            for error in errors
+        )
+        
+        if not has_indent_error:
+            return code
+        
+        lines = code.splitlines()
+        if not lines:
+            return code
+        
+        # Quick indent size detection
+        indent_size = self._quick_detect_indent_size(lines)
+        
+        # Better scope tracking - track (scope_type, indent_level)
+        scope_stack = []
+        fixed_lines = []
+        
+        for i, line in enumerate(lines):
+            stripped = line.lstrip()
+            
+            # Skip empty lines and comments
+            if not stripped or stripped.startswith('#'):
+                fixed_lines.append(line)
+                continue
+            
+            current_indent = len(line) - len(stripped)
+            
+            # Determine line type
+            is_class_def = stripped.startswith('class ')
+            is_func_def = stripped.startswith('def ')
+            is_return = stripped.startswith('return ')
+            is_control_flow = any(stripped.startswith(kw) for kw in ['for ', 'while ', 'if ', 'elif ', 'else:', 'try:', 'except', 'finally:', 'with '])
+            ends_with_colon = line.rstrip().endswith(':')
+            
+            # Pop scopes that we've exited
+            while scope_stack and current_indent <= scope_stack[-1][1]:
+                # Special case: if this is a method definition and we're in a class,
+                # and the current indent is class_indent + indent_size, keep the class scope
+                if (is_func_def and scope_stack and scope_stack[-1][0] == 'class' and 
+                    current_indent == scope_stack[-1][1] + indent_size):
+                    break
+                scope_stack.pop()
+            
+            # Determine expected indentation
+            if not scope_stack:
+                expected_indent = 0
+            else:
+                # We're inside some scope
+                if is_func_def and scope_stack and scope_stack[-1][0] == 'class':
+                    # Method definition inside class
+                    expected_indent = scope_stack[-1][1] + indent_size
+                elif is_class_def or (is_func_def and not scope_stack):
+                    # Top-level class or function
+                    expected_indent = 0
+                elif is_return and scope_stack:
+                    # Return statement should be inside nearest function
+                    for scope_type, scope_indent in reversed(scope_stack):
+                        if scope_type == 'function':
+                            expected_indent = scope_indent + indent_size
+                            break
+                    else:
+                        # No function scope found, this is an error
+                        expected_indent = scope_stack[-1][1] + indent_size
+                elif is_control_flow and scope_stack:
+                    # Control flow should be at current scope level
+                    expected_indent = scope_stack[-1][1] + indent_size
+                else:
+                    # Regular statement inside current scope
+                    expected_indent = scope_stack[-1][1] + indent_size
+            
+            # Special handling: if this looks like code that should be inside the previous function
+            if (current_indent == 0 and scope_stack and 
+                (is_control_flow or is_return or stripped.startswith(('result', 'data', 'item', 'value'))) and
+                scope_stack[-1][0] == 'function'):
+                # This code probably belongs inside the function
+                expected_indent = scope_stack[-1][1] + indent_size
+            
+            # Apply fix if needed
+            if current_indent != expected_indent and abs(current_indent - expected_indent) <= 12:
+                fixed_line = ' ' * expected_indent + stripped
+                fixed_lines.append(fixed_line)
+                current_indent = expected_indent
+            else:
+                fixed_lines.append(line)
+            
+            # Add new scope if this line starts one
+            if ends_with_colon:
+                if is_class_def:
+                    scope_stack.append(('class', current_indent))
+                elif is_func_def:
+                    scope_stack.append(('function', current_indent))
+                else:
+                    scope_stack.append(('block', current_indent))
+        
+        return '\n'.join(fixed_lines)
+    
+    def _fast_fix_merged_lines(self, code: str, errors: List[PythonSyntaxError]) -> str:
+        """Fast fix for lines that should be split (missing newlines)."""
+        lines = code.splitlines()
+        fixed_lines = []
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # Skip empty lines and comments
+            if not stripped or stripped.startswith('#'):
+                fixed_lines.append(line)
+                continue
+            
+            original_line = line
+            line_was_split = False
+            
+            # Check for colon followed by non-whitespace (should be newline)
+            if ':' in stripped and not stripped.endswith(':'):
+                colon_pos = stripped.find(':')
+                after_colon = stripped[colon_pos + 1:].strip()
+                
+                # If there's significant code after colon (not just a comment)
+                if after_colon and not after_colon.startswith('#'):
+                    # Check if this looks like it should be split
+                    before_colon = stripped[:colon_pos + 1]
+                    
+                    # Keywords that should definitely be followed by newline
+                    control_keywords = ['def', 'class', 'if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally', 'with']
+                    should_split = any(before_colon.strip().startswith(f'{keyword} ') or before_colon.strip() == keyword for keyword in control_keywords)
+                    
+                    if should_split:
+                        # Split the line
+                        indent = len(line) - len(line.lstrip())
+                        before_line = ' ' * indent + before_colon
+                        
+                        # Determine appropriate indent for the next line
+                        next_indent = indent + self._quick_detect_indent_size(lines)
+                        after_line = ' ' * next_indent + after_colon
+                        
+                        fixed_lines.append(before_line)
+                        fixed_lines.append(after_line)
+                        line_was_split = True
+            
+            # Check for multiple statements on one line (semicolon separated or space separated keywords)
+            if not line_was_split:
+                # Look for patterns like "import sys import os" or "a = 1; b = 2"
+                if ';' in stripped:
+                    # Split on semicolons
+                    indent = len(line) - len(line.lstrip())
+                    parts = [part.strip() for part in stripped.split(';') if part.strip()]
+                    if len(parts) > 1:
+                        for i, part in enumerate(parts):
+                            fixed_lines.append(' ' * indent + part)
+                        line_was_split = True
+                
+                # Look for import statements with multiple imports on one line
+                elif 'import' in stripped and ' import ' in stripped:
+                    # Check if this looks like "import sys import os"
+                    import_parts = re.findall(r'\b(?:import|from)\s+\w+(?:\.\w+)*(?:\s+import\s+\w+)?', stripped)
+                    if len(import_parts) > 1:
+                        indent = len(line) - len(line.lstrip())
+                        for part in import_parts:
+                            fixed_lines.append(' ' * indent + part.strip())
+                        line_was_split = True
+            
+            # If line wasn't split, keep the original
+            if not line_was_split:
+                fixed_lines.append(original_line)
+        
+        return '\n'.join(fixed_lines)
+    
+    def _fast_fix_missing_colons(self, code: str, errors: List[PythonSyntaxError]) -> str:
+        """Fast fix for missing colons in control structures."""
+        lines = code.splitlines()
+        fixed_lines = []
+        
+        # Keywords that should end with colons
+        colon_keywords = ['def', 'class', 'if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally', 'with']
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # Skip empty lines and comments
+            if not stripped or stripped.startswith('#'):
+                fixed_lines.append(line)
+                continue
+            
+            # Check if line starts with a keyword that should end with colon
+            should_have_colon = any(
+                stripped.startswith(f'{keyword} ') or stripped == keyword
+                for keyword in colon_keywords
+            )
+            
+            if should_have_colon and not line.rstrip().endswith(':'):
+                # Add missing colon
+                comment_pos = line.find('#')
+                if comment_pos >= 0:
+                    fixed_line = line[:comment_pos].rstrip() + ':  ' + line[comment_pos:]
+                else:
+                    fixed_line = line.rstrip() + ':'
+                fixed_lines.append(fixed_line)
+            else:
+                fixed_lines.append(line)
+        
+        return '\n'.join(fixed_lines)
+    
+    def _quick_detect_indent_size(self, lines: List[str]) -> int:
+        """Quickly detect indentation size from first few indented lines."""
+        for line in lines[:20]:  # Only check first 20 lines for speed
+            stripped = line.lstrip()
+            if stripped and not stripped.startswith('#'):
+                indent = len(line) - len(stripped)
+                if indent > 0:
+                    # Common indent sizes
+                    if indent % 4 == 0:
+                        return 4
+                    elif indent % 2 == 0:
+                        return 2
+                    elif indent % 8 == 0:
+                        return 8
+                    else:
+                        return indent
+        return 4  # Default fallback
     
     def _analyze_syntax_errors(self, code: str) -> List[PythonSyntaxError]:
-        """Analyze code and return list of syntax errors."""
+        """Analyze code and return list of syntax errors with caching."""
+        # Use cache to avoid repeated parsing
+        code_hash = hash(code)
+        if code_hash in self._error_cache:
+            return self._error_cache[code_hash]
+        
         errors = []
         
         # Try to parse with AST
         try:
             ast.parse(code)
+            self._error_cache[code_hash] = []
             return []  # No syntax errors
         except SyntaxError as e:
             errors.append(PythonSyntaxError(
@@ -153,30 +487,19 @@ class SyntaxRepairEngine:
                 error_type="parse"
             ))
         
-        # Additional tokenization analysis for more detailed errors
-        try:
-            tokens = list(tokenize.tokenize(io.BytesIO(code.encode()).readline))
-        except tokenize.TokenError as e:
-            errors.append(PythonSyntaxError(
-                line_no=e.args[1][0] if len(e.args) > 1 else 1,
-                column=e.args[1][1] if len(e.args) > 1 else 0,
-                message=f"Token error: {e.args[0]}",
-                error_type="token"
-            ))
-        except Exception:
-            pass  # Skip additional analysis if tokenization fails
-        
+        # Cache and return results
+        self._error_cache[code_hash] = errors
         return errors
     
-    def _attempt_repair(self, code: str, error: PythonSyntaxError) -> str:
-        """Attempt to repair a specific syntax error."""
-        for strategy in self.repair_strategies:
+    def _attempt_comprehensive_repair(self, code: str, error: PythonSyntaxError) -> str:
+        """Attempt to repair using comprehensive strategies (fallback)."""
+        for strategy in self.comprehensive_strategies:
             try:
                 fixed_code = strategy(code, error)
                 if fixed_code != code:
                     return fixed_code
             except Exception as e:
-                logger.debug(f"Repair strategy failed: {e}")
+                logger.debug(f"Comprehensive repair strategy failed: {e}")
                 continue
         
         return code  # No repair possible
@@ -533,9 +856,24 @@ class SyntaxRepairEngine:
             return indent_stack[-1]
 
 
+# Backward compatibility class
+class SyntaxRepairEngine(OptimizedSyntaxRepairEngine):
+    """
+    Backward compatibility wrapper around OptimizedSyntaxRepairEngine.
+    
+    This class maintains the same interface as the original SyntaxRepairEngine
+    but uses the optimized implementation under the hood.
+    """
+    
+    def __init__(self):
+        super().__init__()
+        # Map old repair_strategies to new comprehensive_strategies for compatibility
+        self.repair_strategies = self.comprehensive_strategies
+
+
 def repair_python_syntax(code: str, max_attempts: int = 5) -> Dict[str, Any]:
     """
-    Convenience function to repair Python syntax errors.
+    Convenience function to repair Python syntax errors using optimized engine.
     
     Args:
         code: Python source code as string
@@ -544,7 +882,7 @@ def repair_python_syntax(code: str, max_attempts: int = 5) -> Dict[str, Any]:
     Returns:
         Dictionary with repair results
     """
-    engine = SyntaxRepairEngine()
+    engine = OptimizedSyntaxRepairEngine()
     return engine.analyze_and_repair(code, max_attempts)
 
 

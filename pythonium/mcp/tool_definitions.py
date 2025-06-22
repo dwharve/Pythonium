@@ -344,5 +344,31 @@ def get_tool_definitions() -> list:
                 },
                 "required": ["file_path"]
             }
+        ),
+        types.Tool(
+            name="get_next_issue_to_work",
+            description="Get details of the next issue that needs to be worked on. Returns the next actionable issue (first unclassified or pending issue) to streamline agent workflows.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_path": {
+                        "type": "string",
+                        "description": "Path to specific project to get next issue for (optional, gets from all projects if not provided)."
+                    },
+                    "priority_order": {
+                        "type": "array",
+                        "items": {
+                            "type": "string", 
+                            "enum": ["unclassified", "pending", "work_in_progress"]
+                        },
+                        "description": "Priority order for selecting issues (default: ['unclassified', 'pending', 'work_in_progress'])."
+                    },
+                    "include_suppressed": {
+                        "type": "boolean",
+                        "description": "Whether to include suppressed issues (default: false)."
+                    }
+                },
+                "required": []
+            }
         )
     ]
