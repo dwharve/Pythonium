@@ -99,6 +99,28 @@ class TestSettings(unittest.TestCase):
         # Test paths that should not be ignored
         self.assertFalse(settings.is_path_ignored(Path('src/main.py')))
         self.assertFalse(settings.is_path_ignored(Path('pythonium/analyzer.py')))
+    
+    def test_venv_pattern_filtering(self):
+        """Test that **/venv/** pattern works correctly and doesn't over-match."""
+        settings = Settings()
+        
+        # Test paths that should be ignored (venv paths)
+        self.assertTrue(settings.is_path_ignored(Path('venv/lib/python3.11/site-packages/module.py')))
+        self.assertTrue(settings.is_path_ignored(Path('project/venv/bin/python')))
+        self.assertTrue(settings.is_path_ignored(Path('deep/nested/venv/lib/something.py')))
+        self.assertTrue(settings.is_path_ignored(Path('./venv/Scripts/activate')))
+        self.assertTrue(settings.is_path_ignored(Path('some/path/venv/anything/here.py')))
+        
+        # Test paths that should NOT be ignored (similar but different paths)
+        self.assertFalse(settings.is_path_ignored(Path('venvironment/lib/module.py')))
+        self.assertFalse(settings.is_path_ignored(Path('venv_backup/lib/module.py')))
+        self.assertFalse(settings.is_path_ignored(Path('src/venv_utils.py')))
+        self.assertFalse(settings.is_path_ignored(Path('venv.py')))
+        
+        # Edge cases that should NOT be ignored
+        self.assertFalse(settings.is_path_ignored(Path('venv')))  # Just the directory name
+        self.assertFalse(settings.is_path_ignored(Path('./venv')))  # Just the directory name
+        self.assertFalse(settings.is_path_ignored(Path('venv/')))  # Directory without content
 
 
 if __name__ == '__main__':

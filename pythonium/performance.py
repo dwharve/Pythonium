@@ -161,10 +161,11 @@ class AnalysisCache:
             cache_path: Path to SQLite cache file. If None, uses default location.
         """
         if cache_path is None:
-            cache_path = Path.home() / ".pythonium" / "cache.db"
+            # Use centralized path resolver for consistent cache location
+            from .database_paths import DatabasePathResolver
+            cache_path = DatabasePathResolver.get_cache_db_path()
         
         self.cache_path = cache_path
-        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         self._cache_hits = 0
         self._cache_misses = 0
         self._init_db()

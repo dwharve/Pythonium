@@ -75,7 +75,7 @@ performance:
   cache_enabled: true
   
   # Cache location (relative to project root)
-  cache_path: ".pythonium_cache.db"
+  cache_path: ".pythonium/cache.db"
 
 # Integration settings
 integration:
@@ -213,7 +213,7 @@ export PYTHONIUM_DETECTOR_CLONE=false
 export PYTHONIUM_OUTPUT_FORMAT=json
 
 # Set cache location
-export PYTHONIUM_CACHE_PATH=/tmp/pythonium_cache.db
+export PYTHONIUM_CACHE_PATH=/path/to/project/.pythonium/cache.db
 
 # Set log level
 export PYTHONIUM_LOG_LEVEL=DEBUG

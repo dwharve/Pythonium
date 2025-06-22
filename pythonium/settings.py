@@ -83,7 +83,7 @@ class Settings:
                 "**/site-packages/**",   # Installed packages
                 "**/.eggs/**",           # Setuptools eggs
                 "**/*.egg-info/**",      # Package metadata
-                ".pythonium_cache.db"    # Pythonium cache
+                ".pythonium/**"          # Pythonium cache directory
             ]
         
         if not self.thresholds:
@@ -209,16 +209,71 @@ class Settings:
                 
                 return False
         
-        # For more complex patterns with multiple **, fall back to a simpler check
-        # Remove ** and see if the remaining parts are contained in the path
-        pattern_parts = [part for part in parts if part.strip("/")]
-        if not pattern_parts:
+        # Handle patterns like "**/venv/**" (3 parts)
+        elif len(parts) == 3:
+            prefix = parts[0].rstrip("/")
+            middle = parts[1].strip("/")
+            suffix = parts[2].lstrip("/")
+            
+            # Pattern like "**/venv/**"
+            if not prefix and not suffix:
+                # Must have a directory named exactly 'middle' as a complete path segment
+                path_segments = normalized_path.split("/")
+                
+                # Check if the middle part appears as a complete path segment
+                for segment in path_segments:
+                    if fnmatch.fnmatch(segment, middle):
+                        # Found the middle segment, now check if there's content after it
+                        segment_index = path_segments.index(segment)
+                        if segment_index < len(path_segments) - 1:
+                            # There are more segments after the middle one
+                            return True
+                
+                return False
+            else:
+                # More complex pattern like "prefix/**/middle/**/suffix"
+                # For now, fall back to a conservative approach
+                return self._fallback_pattern_match(normalized_path, parts)
+        
+        # For more complex patterns with multiple **, use fallback
+        else:
+            return self._fallback_pattern_match(normalized_path, parts)
+    
+    def _fallback_pattern_match(self, path: str, pattern_parts: list) -> bool:
+        """Fallback pattern matching for complex ** patterns."""
+        # Extract meaningful parts (non-empty after cleaning)
+        meaningful_parts = []
+        for part in pattern_parts:
+            clean_part = part.strip("/")
+            if clean_part:
+                meaningful_parts.append(clean_part)
+        
+        if not meaningful_parts:
             return True
         
-        for part in pattern_parts:
-            clean_part = part.strip("/").replace("*", "")
-            if clean_part and clean_part not in normalized_path:
-                return False
+        # Check if all meaningful parts appear in order in the path
+        path_lower = path.lower()
+        last_index = -1
+        
+        for part in meaningful_parts:
+            # For each part, find it in the path after the last found position
+            if "*" in part:
+                # Use fnmatch for parts with wildcards
+                segments = path.split("/")
+                found = False
+                for i, segment in enumerate(segments):
+                    if i > last_index and fnmatch.fnmatch(segment.lower(), part.lower()):
+                        last_index = i
+                        found = True
+                        break
+                if not found:
+                    return False
+            else:
+                # Simple substring search for exact parts
+                index = path_lower.find(part.lower(), last_index + 1)
+                if index == -1:
+                    return False
+                last_index = index
         
         return True
     

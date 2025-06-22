@@ -140,14 +140,13 @@ class Analyzer:
         # Initialize components
         self.detectors: Dict[str, Detector] = {}
         self.loader = CodeLoader(self.root_path)
-        self.graph: Optional[CodeGraph] = None
-        
-        # Performance features
+        self.graph: Optional[CodeGraph] = None        # Performance features
         self.use_cache = use_cache
         if use_cache:
-            # Set cache to project root for persistence across runs
-            from .performance import set_cache_path
-            cache_path = self.root_path / ".pythonium_cache.db"
+            # Use centralized path resolver for consistent cache location
+            from .database_paths import DatabasePathResolver
+            cache_path = DatabasePathResolver.get_cache_db_path(self.root_path)
+            from .performance import set_cache_path, get_cache
             set_cache_path(cache_path)
             self.cache = get_cache()
         else:

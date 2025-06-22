@@ -120,7 +120,8 @@ result = hello()
             self.assertIsInstance(result, list)
             self.assertGreater(len(result), 0)
             self.assertIsInstance(result[0], types.TextContent)
-            self.assertIn("analysis completed", result[0].text.lower())
+            # The output format has changed to use tracking format, so check for that instead
+            self.assertTrue("found" in result[0].text.lower() or "issues" in result[0].text.lower())
             
         except ImportError:
             self.skipTest("MCP dependencies not available")
@@ -153,12 +154,13 @@ result = hello()
         """Test the list_detectors tool."""
         try:
             from pythonium.mcp_server import PythoniumMCPServer
+            from pythonium.mcp.analysis_tools import list_detectors
             from mcp import types
             
             server = PythoniumMCPServer()
             
             arguments = {}
-            result = asyncio.run(server._list_detectors(arguments))
+            result = asyncio.run(list_detectors(server, arguments))
             
             self.assertIsInstance(result, list)
             self.assertGreater(len(result), 0)
@@ -171,12 +173,13 @@ result = hello()
         """Test the get_detector_info tool."""
         try:
             from pythonium.mcp_server import PythoniumMCPServer
+            from pythonium.mcp.analysis_tools import get_detector_info
             from mcp import types
             
             server = PythoniumMCPServer()
             
             arguments = {"detector_id": "dead_code"}
-            result = asyncio.run(server._get_detector_info(arguments))
+            result = asyncio.run(get_detector_info(server, arguments))
             
             self.assertIsInstance(result, list)
             self.assertGreater(len(result), 0)
@@ -189,6 +192,7 @@ result = hello()
         """Test the analyze_issues tool."""
         try:
             from pythonium.mcp_server import PythoniumMCPServer
+            from pythonium.mcp.analysis_tools import analyze_issues
             from mcp import types
             
             server = PythoniumMCPServer()
@@ -197,7 +201,7 @@ result = hello()
                 "path": str(self.test_file),
                 "severity_filter": "info"
             }
-            result = asyncio.run(server._analyze_issues(arguments))
+            result = asyncio.run(analyze_issues(server, arguments))
             
             self.assertIsInstance(result, list)
             self.assertGreater(len(result), 0)
@@ -279,18 +283,19 @@ result = hello()
         """Test error handling in get_detector_info."""
         try:
             from pythonium.mcp_server import PythoniumMCPServer
+            from pythonium.mcp.analysis_tools import get_detector_info
             
             server = PythoniumMCPServer()
             
             # Test with missing detector_id - should return error message
             arguments = {}
-            result = asyncio.run(server._get_detector_info(arguments))
+            result = asyncio.run(get_detector_info(server, arguments))
             self.assertIsInstance(result, list)
             self.assertIn("not found", result[0].text)
             
             # Test with invalid detector_id
             arguments = {"detector_id": "nonexistent_detector"}
-            result = asyncio.run(server._get_detector_info(arguments))
+            result = asyncio.run(get_detector_info(server, arguments))
             self.assertIsInstance(result, list)
             self.assertIn("not found", result[0].text)
             
@@ -448,13 +453,14 @@ result = hello()
         """Test get_detector_info with invalid detector."""
         try:
             from pythonium.mcp_server import PythoniumMCPServer
+            from pythonium.mcp.analysis_tools import get_detector_info
             from mcp import types
             
             server = PythoniumMCPServer()
             
             # Test with invalid detector_id
             arguments = {"detector_id": "nonexistent_detector"}
-            result = asyncio.run(server._get_detector_info(arguments))
+            result = asyncio.run(get_detector_info(server, arguments))
             
             self.assertIsInstance(result, list)
             self.assertGreater(len(result), 0)
@@ -473,6 +479,7 @@ result = hello()
         """Test analyze_issues with different severity filters."""
         try:
             from pythonium.mcp_server import PythoniumMCPServer
+            from pythonium.mcp.analysis_tools import analyze_issues
             from mcp import types
             
             server = PythoniumMCPServer()
@@ -483,7 +490,7 @@ result = hello()
                     "path": str(self.test_file),
                     "severity_filter": severity
                 }
-                result = asyncio.run(server._analyze_issues(arguments))
+                result = asyncio.run(analyze_issues(server, arguments))
                 
                 self.assertIsInstance(result, list)
                 self.assertGreater(len(result), 0)

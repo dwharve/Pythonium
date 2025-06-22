@@ -426,7 +426,7 @@ asyncio.run(main())
 from pythonium.performance import AnalysisCache
 
 # Use caching for faster repeated analysis
-cache = AnalysisCache(cache_path=Path(".pythonium_cache.db"))
+cache = AnalysisCache(cache_path=Path(".pythonium/cache.db"))
 
 # Check if file needs re-analysis
 file_path = Path("src/main.py")

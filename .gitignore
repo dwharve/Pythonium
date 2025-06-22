@@ -50,7 +50,8 @@ coverage.xml
 nosetests.xml
 
 # Pythonium specific
-.pythonium_cache.db
+# Pythonium cache files
+.pythonium/
 pythonium-report.html
 .pythonium.yml
 

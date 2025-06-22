@@ -645,7 +645,7 @@ ignore:
   - "**/build/**"          # Build artifacts
   - "**/.git/**"           # Git repository
   - "**/.tox/**"           # Tox environments
-  - ".pythonium_cache.db" # Code health analysis cache
+  - ".pythonium/"          # Pythonium data directory (includes cache.db and issues.db)
 """
     
     try:

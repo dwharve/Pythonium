@@ -29,8 +29,8 @@ class OperationProfiler:
         }
         self.operations.append(operation)
         self.current_operation = operation
-        # Only log if debug logging is enabled (logger has handlers)
-        if logger.handlers:
+        # Only log if debug mode is enabled
+        if is_debug_mode():
             logger.info(f"Starting operation: {name} - {kwargs}")
     
     def checkpoint(self, checkpoint_name: str, **kwargs) -> None:
@@ -46,8 +46,8 @@ class OperationProfiler:
         }
         self.current_operation["checkpoints"].append(checkpoint)
         
-        # Only log if debug logging is enabled (logger has handlers)
-        if logger.handlers:
+        # Only log if debug mode is enabled
+        if is_debug_mode():
             elapsed_str = f"{checkpoint['elapsed']:.2f}s"
             logger.info(f"Checkpoint: {checkpoint_name} at {elapsed_str} - {kwargs}")
     
@@ -63,8 +63,8 @@ class OperationProfiler:
         self.current_operation["status"] = "success" if success else "failed"
         self.current_operation["result_metadata"] = kwargs
         
-        # Only log if debug logging is enabled (logger has handlers)
-        if logger.handlers:
+        # Only log if debug mode is enabled
+        if is_debug_mode():
             status_icon = "SUCCESS" if success else "FAILED"
             duration_str = f"{self.current_operation['duration']:.2f}s"
             logger.info(f"{status_icon} Completed operation: {self.current_operation['name']} in {duration_str} - Status: {self.current_operation['status']}")
@@ -147,9 +147,9 @@ def setup_debug_logging() -> None:
     file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
     
-    # Console handler for important messages - reduce verbosity
+    # Console handler for important messages - debug mode shows more
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.WARNING)  # Only show warnings and errors on console
+    console_handler.setLevel(logging.INFO)  # Show INFO and above in debug mode
     
     # Create formatter
     formatter = logging.Formatter(
@@ -165,34 +165,78 @@ def setup_debug_logging() -> None:
     logger.info(f"Debug logging enabled - Log file: {log_file}")
     print(f"Debug logging enabled - Log file: {log_file}")
 
+def setup_minimal_logging() -> None:
+    """Set up minimal logging for the MCP server (non-debug mode)."""
+    # Configure the logger for minimal output
+    logger.setLevel(logging.WARNING)
+    
+    # Remove existing handlers to avoid duplicates
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    
+    # Console handler for warnings and errors only
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.WARNING)
+    
+    # Simple formatter for minimal output
+    formatter = logging.Formatter('%(levelname)s: %(message)s')
+    console_handler.setFormatter(formatter)
+    
+    # Add handler
+    logger.addHandler(console_handler)
+
+def is_debug_mode() -> bool:
+    """Check if debug mode is enabled by looking at logger configuration."""
+    return logger.level <= logging.INFO and any(
+        handler.level <= logging.INFO for handler in logger.handlers
+    )
+
+def debug_log(message: str, *args, **kwargs) -> None:
+    """Log a debug message only if debug mode is enabled."""
+    if is_debug_mode():
+        logger.debug(message, *args, **kwargs)
+
+def info_log(message: str, *args, **kwargs) -> None:
+    """Log an info message only if debug mode is enabled."""
+    if is_debug_mode():
+        logger.info(message, *args, **kwargs)
+
+def warning_log(message: str, *args, **kwargs) -> None:
+    """Log a warning message (always shown)."""
+    logger.warning(message, *args, **kwargs)
+
+def error_log(message: str, *args, **kwargs) -> None:
+    """Log an error message (always shown)."""
+    logger.error(message, *args, **kwargs)
+
 def log_file_discovery(path: Path, files: List[Path]) -> None:
     """Log file discovery details."""
     if path.is_dir():
-        logger.info(f"Discovered {len(files)} Python files in directory: {path}")
+        info_log(f"Discovered {len(files)} Python files in directory: {path}")
         if len(files) <= 10:
             for file in files:
-                logger.debug(f"  File: {file}")
+                debug_log(f"  File: {file}")
         else:
-            logger.info(f"  First 5 files: {[str(f) for f in files[:5]]}")
-            logger.info(f"  ... and {len(files) - 5} more files")
+            info_log(f"  First 5 files: {[str(f) for f in files[:5]]}")
+            info_log(f"  ... and {len(files) - 5} more files")
     else:
-        logger.info(f"Analyzing single file: {path}")
+        info_log(f"Analyzing single file: {path}")
 
 def log_analyzer_creation(config: Dict[str, Any], use_cache: bool, use_parallel: bool) -> None:
     """Log analyzer creation details."""
     detector_count = len(config.get('detectors', {})) if config.get('detectors') else 'all'
-    logger.info(f"Creating analyzer - Detectors: {detector_count}, Cache: {use_cache}, Parallel: {use_parallel}")
+    info_log(f"Creating analyzer - Detectors: {detector_count}, Cache: {use_cache}, Parallel: {use_parallel}")
     
     if config.get('detectors'):
         enabled_detectors = [d for d, settings in config['detectors'].items() if settings.get('enabled', True)]
-        logger.debug(f"Enabled detectors: {enabled_detectors}")
+        debug_log(f"Enabled detectors: {enabled_detectors}")
 
 def log_analysis_start(files: List[Path]) -> None:
     """Log analysis start details."""
-    logger.info(f"Starting analysis of {len(files)} file(s)")
+    info_log(f"Starting analysis of {len(files)} file(s)")
     if len(files) > 50:
-        logger.warning(f"Large analysis scope: {len(files)} files. This may take several minutes.")
+        warning_log(f"Large analysis scope: {len(files)} files. This may take several minutes.")
     elif len(files) > 20:
-        logger.info(f"Medium analysis scope: {len(files)} files. Expected duration: 30-60 seconds.")
+        info_log(f"Medium analysis scope: {len(files)} files. Expected duration: 30-60 seconds.")
     else:
-        logger.info(f"Small analysis scope: {len(files)} files. Expected duration: <30 seconds.")
+        info_log(f"Small analysis scope: {len(files)} files. Expected duration: <30 seconds.")

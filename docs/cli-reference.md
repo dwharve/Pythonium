@@ -450,7 +450,7 @@ pythonium crawl --include "*.py" --exclude "**/test_*.py"
    ls -la .pythonium.yml
    
    # Use different cache location
-   pythonium crawl --cache-path /tmp/pythonium_cache.db
+   pythonium crawl --cache-path /path/to/project/.pythonium/cache.db
    ```
 
 3. **Performance issues**
