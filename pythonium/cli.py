@@ -460,15 +460,7 @@ def main() -> None:
 @click.pass_context
 def mcp_server(ctx: click.Context, transport: str, host: str, port: int) -> None:
     """Start the Model Context Protocol (MCP) server for LLM agent integration."""
-    try:
-        from .mcp_server import PythoniumMCPServer, MCP_AVAILABLE
-    except ImportError:
-        click.echo("Error: MCP dependencies not found. Install with: pip install pythonium[mcp]", err=True)
-        ctx.exit(1)
-    
-    if not MCP_AVAILABLE:
-        click.echo("Error: MCP dependencies not available. Install with: pip install mcp", err=True)
-        ctx.exit(1)
+    from .mcp_server import PythoniumMCPServer
     
     import asyncio
     

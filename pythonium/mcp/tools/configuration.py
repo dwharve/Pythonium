@@ -5,11 +5,7 @@ Contains methods for providing configuration schema documentation.
 
 from typing import Any, Dict, List
 
-try:
-    import mcp.types as types
-    MCP_AVAILABLE = True
-except ImportError:
-    MCP_AVAILABLE = False
+import mcp.types as types
 
 
 async def get_configuration_schema(server, arguments: Dict[str, Any]) -> List[types.TextContent]:

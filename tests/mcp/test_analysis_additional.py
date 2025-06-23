@@ -50,19 +50,3 @@ async def test_analyze_issues_match_by_filename(tmp_path):
     assert "Pythonium Analysis Summary" in text
     assert "circular" in text
 
-
-def test_get_tool_definitions_missing_mcp(monkeypatch):
-    import pythonium.mcp.tools.definitions as definitions
-    original_import = builtins.__import__
-    def fake_import(name, *args, **kwargs):
-        if name == "mcp.types":
-            raise ImportError
-        return original_import(name, *args, **kwargs)
-    monkeypatch.setattr(builtins, "__import__", fake_import)
-    importlib.reload(definitions)
-    try:
-        assert definitions.MCP_AVAILABLE is False
-        assert definitions.get_tool_definitions() == []
-    finally:
-        monkeypatch.setattr(builtins, "__import__", original_import)
-        importlib.reload(definitions)

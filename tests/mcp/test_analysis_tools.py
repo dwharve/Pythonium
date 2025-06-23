@@ -53,6 +53,26 @@ async def test_analyze_issues_filters_and_summary(tmp_path):
     assert "Issues found" in text
     assert "det2" in text  # detector breakdown present
 
+
+@pytest.mark.asyncio
+async def test_analyze_issues_no_results(tmp_path):
+    path = tmp_path / "missing.py"
+    server = DummyServer({}, {})
+    result = await analysis.analyze_issues(server, {"path": str(path)})
+    assert "No previous analysis results" in result[0].text
+
+
+@pytest.mark.asyncio
+async def test_analyze_issues_filename_match(tmp_path):
+    real = tmp_path / "src" / "same.py"
+    real.parent.mkdir(parents=True, exist_ok=True)
+    real.write_text("print('x')")
+    issues = [Issue(id="i", severity="info", message="m", location=Location(file=real, line=1), detector_id="d")]
+    server = DummyServer({"d": {"description": "desc"}}, {str(real): issues})
+    query = tmp_path / "other" / "same.py"
+    result = await analysis.analyze_issues(server, {"path": str(query)})
+    assert "Pythonium Analysis Summary" in result[0].text
+
 @pytest.mark.asyncio
 async def test_debug_profile_resets():
     server = DummyServer({})

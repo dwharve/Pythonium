@@ -8,11 +8,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict, List
 
-try:
-    import mcp.types as types
-    MCP_AVAILABLE = True
-except ImportError:
-    MCP_AVAILABLE = False
+import mcp.types as types
 
 from pythonium.analyzer import Analyzer
 from pythonium.cli import find_project_root, get_or_create_config

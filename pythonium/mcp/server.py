@@ -9,15 +9,11 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable
 
-try:
-    import mcp.server.stdio
-    import mcp.server.sse
-    import mcp.types as types
-    from mcp.server import Server
-    from mcp.types import ServerCapabilities, ToolsCapability
-    MCP_AVAILABLE = True
-except ImportError:
-    MCP_AVAILABLE = False
+import mcp.server.stdio
+import mcp.server.sse
+import mcp.types as types
+from mcp.server import Server
+from mcp.types import ServerCapabilities, ToolsCapability
 
 from pythonium.analyzer import Analyzer
 from pythonium.cli import find_project_root, get_or_create_config
@@ -45,11 +41,6 @@ class PythoniumMCPServer:
     
     def __init__(self, name: str = "pythonium", version: str = "0.1.0", debug: bool = False):
         """Initialize the MCP server."""
-        if not MCP_AVAILABLE:
-            raise ImportError(
-                "MCP dependencies not available. Install with: "
-                "pip install mcp"
-            )
         
         # Setup logging
         if debug:

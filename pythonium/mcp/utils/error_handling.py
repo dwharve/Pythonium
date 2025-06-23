@@ -12,11 +12,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union, Type, Callable
 
-try:
-    import mcp.types as types
-    MCP_AVAILABLE = True
-except ImportError:
-    MCP_AVAILABLE = False
+import mcp.types as types
 
 from .debug import error_log, warning_log, info_log
 
@@ -186,17 +182,14 @@ class ErrorHandler:
     ) -> List[types.TextContent]:
         """
         Handle an error and generate appropriate response.
-        
+
         Args:
             exception: Exception to handle
             context: Error context
-            
+
         Returns:
             List of text content for MCP response
         """
-        if not MCP_AVAILABLE:
-            # Fallback if MCP types not available
-            return [{"type": "text", "text": f"Error: {str(exception)}"}]
         
         # Classify the error
         error_info = self._classify_error(exception, context)

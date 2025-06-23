@@ -9,11 +9,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, Awaitable, Callable, Dict, List
 
-try:
-    import mcp.types as types
-    MCP_AVAILABLE = True
-except ImportError:
-    MCP_AVAILABLE = False
+import mcp.types as types
 
 from ..utils.debug import info_log, warning_log, error_log
 from ..utils import Validator, ErrorHandler, PerformanceMonitor, ErrorContext, ErrorSeverity

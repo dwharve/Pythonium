@@ -5,11 +5,7 @@ Issue tracking MCP tool handlers for Pythonium.
 from pathlib import Path
 from typing import Any, Dict, List
 
-try:
-    import mcp.types as types
-    MCP_AVAILABLE = True
-except ImportError:
-    MCP_AVAILABLE = False
+import mcp.types as types
 
 from ..utils.debug import profiler, profile_operation, info_log
 from ..formatters import ActionSuggestion

@@ -6,11 +6,7 @@ Contains methods for analyzing issues, detector info, and reporting.
 from pathlib import Path
 from typing import Any, Dict, List
 
-try:
-    import mcp.types as types
-    MCP_AVAILABLE = True
-except ImportError:
-    MCP_AVAILABLE = False
+import mcp.types as types
 
 from ..utils.debug import info_log
 
