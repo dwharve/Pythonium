@@ -184,7 +184,7 @@ class AgentFormatter(BaseResponseFormatter):
         latest_action_type = latest_action.get("action", "")
         stage = stage_map.get(latest_action_type, WorkflowStage.INVESTIGATION)
         
-        message = f"📋 Agent action history for {issue_hash}: {len(actions)} actions recorded"
+        message = f"Agent action history for {issue_hash}: {len(actions)} actions recorded"
         
         return ResponseData(
             type=ResponseType.SUCCESS,
@@ -214,27 +214,27 @@ class AgentFormatter(BaseResponseFormatter):
             ActionSuggestion(
                 action="classify_based_on_findings",
                 description="Classify this issue based on investigation findings",
-                tool_call="mark_issue",
-                parameters={"issue_hash": issue_hash},
+                tool_call="update_issue",
+                parameters={"issue_hash": issue_hash, "classification": "true_positive"},
                 priority="high"
             ),
             ActionSuggestion(
                 action="start_resolution",
                 description="Begin working on resolving this issue",
-                tool_call="mark_issue",
+                tool_call="update_issue",
                 parameters={"issue_hash": issue_hash, "status": "work_in_progress"},
                 priority="medium"
             ),
             ActionSuggestion(
                 action="get_full_details",
                 description="View complete issue details with investigation notes",
-                tool_call="get_issue_info",
+                tool_call="get_issue",
                 parameters={"issue_hash": issue_hash},
                 priority="low"
             )
         ]
         
-        message = f"🔍 Investigation completed for issue {issue_hash}"
+        message = f"Investigation completed for issue {issue_hash}"
         
         return ResponseData(
             type=ResponseType.SUCCESS,

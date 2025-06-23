@@ -8,6 +8,7 @@ code graph representation.
 
 import ast
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union
 
@@ -77,7 +78,7 @@ class Symbol:
 @dataclass
 class Issue:
     """
-    Represents an issue found by a detector.
+    Represents an issue found by a detector with tracking capabilities.
     
     Attributes:
         id: Unique issue identifier (e.g., "dead_code.unused_function")
@@ -88,6 +89,14 @@ class Issue:
         detector_id: ID of the detector that found this issue
         metadata: Additional issue-specific metadata
         related_files: List of files involved in this issue (for multi-file issues)
+        
+        # Tracking fields (merged from TrackedIssue)
+        issue_hash: Optional[str] = None  # Unique hash for tracking
+        classification: str = "unclassified"  # unclassified, true_positive, false_positive
+        status: str = "pending"  # pending, work_in_progress, completed
+        notes: List[str] = field(default_factory=list)  # List of notes
+        first_seen: Optional[datetime] = None
+        last_seen: Optional[datetime] = None
     """
     id: str
     severity: str
@@ -97,6 +106,14 @@ class Issue:
     detector_id: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     related_files: List[Path] = field(default_factory=list)
+    
+    # Tracking fields (merged from TrackedIssue)
+    issue_hash: Optional[str] = None
+    classification: str = "unclassified"
+    status: str = "pending"
+    notes: List[str] = field(default_factory=list)
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
 
     def __post_init__(self) -> None:
         """Initialize computed fields."""
@@ -119,11 +136,60 @@ class Issue:
         # Validate severity
         if self.severity not in {"info", "warn", "error"}:
             raise ValueError(f"Invalid severity: {self.severity}")
+        
+        # Validate classification
+        if self.classification not in {"unclassified", "true_positive", "false_positive"}:
+            raise ValueError(f"Invalid classification: {self.classification}")
+        
+        # Validate status
+        if self.status not in {"pending", "work_in_progress", "completed"}:
+            raise ValueError(f"Invalid status: {self.status}")
+        
+        # Initialize timestamps if not set and this is a tracked issue
+        if self.issue_hash and self.first_seen is None:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            object.__setattr__(self, 'first_seen', now)
+            if self.last_seen is None:
+                object.__setattr__(self, 'last_seen', now)
     
     @property
     def is_multi_file(self) -> bool:
         """Check if this issue spans multiple files."""
         return len(self.related_files) > 1
+    
+    @property
+    def is_tracked(self) -> bool:
+        """Check if this issue is being tracked."""
+        return self.issue_hash is not None
+    
+    def add_note(self, note: str) -> None:
+        """Add a note to the issue."""
+        if note and note.strip():
+            self.notes.append(note.strip())
+    
+    def generate_hash(self) -> str:
+        """Generate a hash for this issue based on its identifying characteristics."""
+        import hashlib
+        
+        hash_components = [
+            self.detector_id or "unknown",
+            self.id,
+            str(self.location.file) if self.location else "no-file",
+            str(self.location.line) if self.location else "no-line",
+            self.message[:200],  # Truncated for consistency
+        ]
+        
+        # Add key metadata that affects issue identity
+        if self.metadata:
+            # Sort keys for consistent hashing
+            for key in sorted(self.metadata.keys()):
+                if key in ["symbol_name", "function_name", "class_name", "variable_name"]:
+                    hash_components.append(f"{key}:{self.metadata[key]}")
+        
+        # Create hash
+        hash_string = "|".join(str(c) for c in hash_components)
+        return hashlib.sha256(hash_string.encode()).hexdigest()[:16]
 
 
 @dataclass

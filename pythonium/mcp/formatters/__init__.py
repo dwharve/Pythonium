@@ -4,8 +4,8 @@ Response formatting for Pythonium MCP tools.
 This module provides structured, actionable response formatting to guide agents
 through effective issue resolution workflows.
 
-This is a modular implementation that maintains backward compatibility with the
-original ResponseFormatter interface.
+This is a modular implementation with specialized formatters for different types
+of responses and data structures.
 """
 
 from typing import Any, Dict, List, Optional, Union
@@ -29,8 +29,8 @@ from .text_converter import TextConverter
 class ResponseFormatter(BaseResponseFormatter):
     """Main response formatter that combines all specialized formatters.
     
-    This class maintains backward compatibility with the original ResponseFormatter
-    while providing a modular internal structure.
+    This class provides a unified interface for all response formatting operations
+    while using a modular internal structure.
     """
     
     def __init__(self):
@@ -143,7 +143,7 @@ class ResponseFormatter(BaseResponseFormatter):
         error_type: str = "general",
         recovery_suggestions: List[ActionSuggestion] = None
     ) -> ResponseData:
-        """Alias for format_error to ensure backward compatibility."""
+        """Alias for format_error for consistency."""
         return self._error_formatter.format_error_response(
             error_message, error_type, recovery_suggestions
         )
@@ -168,7 +168,7 @@ class ResponseFormatter(BaseResponseFormatter):
         return self._text_converter.to_text_content(response_data)
 
 
-# Export all public classes and types for backward compatibility
+# Export all public classes and types
 __all__ = [
     'ResponseFormatter',
     'ResponseType',

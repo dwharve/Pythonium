@@ -12,7 +12,7 @@ try:
 except ImportError:
     MCP_AVAILABLE = False
 
-from .debug import info_log
+from ..utils.debug import info_log
 
 
 async def list_detectors(server, arguments: Dict[str, Any]) -> List[types.TextContent]:
@@ -245,7 +245,7 @@ async def analyze_issues(server, arguments: Dict[str, Any]) -> List[types.TextCo
 
 async def debug_profile(server, arguments: Dict[str, Any]) -> List[types.TextContent]:
     """Return profiling information for debugging."""
-    from .debug import profiler
+    from ..utils.debug import profiler
     
     reset = arguments.get("reset", False)
     

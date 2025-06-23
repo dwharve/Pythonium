@@ -13,7 +13,7 @@ try:
 except ImportError:
     MCP_AVAILABLE = False
 
-from ..debug import profiler, profile_operation
+from ..utils.debug import profiler, profile_operation
 from .base import BaseHandler
 
 
@@ -174,7 +174,7 @@ class ExecutionHandlers(BaseHandler):
                         "-" * 30
                     ])
                     for i, attempt in enumerate(result["attempts"], 1):
-                        status = "✓" if attempt.get("success") else "✗"
+                        status = "SUCCESS" if attempt.get("success") else "FAILED"
                         output_lines.append(f"  {status} Attempt {i}: {attempt.get('strategy', 'unknown')}")
                         if attempt.get("error"):
                             output_lines.append(f"      Error: {attempt['error']}")
@@ -182,14 +182,14 @@ class ExecutionHandlers(BaseHandler):
                 if result["success"]:
                     output_lines.extend([
                         "",
-                        "✅ Result: All syntax errors can be automatically fixed!",
+                        "RESULT: All syntax errors can be automatically fixed!",
                         "",
                         "To apply the fixes, run this tool again with dry_run=false"
                     ])
                 else:
                     output_lines.extend([
                         "",
-                        "❌ Result: Unable to fix all syntax errors automatically",
+                        "RESULT: Unable to fix all syntax errors automatically",
                         "",
                         f"Remaining errors after {max_attempts} attempts:"
                     ])
@@ -214,7 +214,7 @@ class ExecutionHandlers(BaseHandler):
                 
                 if result["success"]:
                     output_lines.extend([
-                        "✅ SUCCESS: All syntax errors have been fixed!",
+                        "SUCCESS: All syntax errors have been fixed!",
                         "",
                         f"Original errors: {len(result.get('original_errors', []))}",
                         f"Repair attempts: {len(result.get('attempts', []))}",
@@ -232,11 +232,11 @@ class ExecutionHandlers(BaseHandler):
                         ])
                         for i, attempt in enumerate(result["attempts"], 1):
                             if attempt.get("success"):
-                                output_lines.append(f"  ✓ Step {i}: Fixed {attempt.get('error', 'unknown error')}")
+                                output_lines.append(f"  Step {i}: Fixed {attempt.get('error', 'unknown error')}")
                     
                 else:
                     output_lines.extend([
-                        "❌ FAILED: Could not fix all syntax errors",
+                        "FAILED: Could not fix all syntax errors",
                         "",
                         f"Original errors: {len(result.get('original_errors', []))}",
                         f"Repair attempts: {len(result.get('attempts', []))}",

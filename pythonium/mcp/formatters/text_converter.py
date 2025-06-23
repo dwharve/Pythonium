@@ -27,7 +27,7 @@ class TextConverter:
         if response_data.workflow_context:
             wc = response_data.workflow_context
             lines.append("")
-            lines.append("🔄 **Workflow Status:**")
+            lines.append("**Workflow Status:**")
             lines.append(f"   Current Stage: {wc.current_stage.value}")
             
             if wc.next_stage:
@@ -42,7 +42,7 @@ class TextConverter:
         # Add suggestions
         if response_data.suggestions:
             lines.append("")
-            lines.append("💡 **Suggested Actions:**")
+            lines.append("**Suggested Actions:**")
             
             # Group by priority
             by_priority = {"critical": [], "high": [], "medium": [], "low": []}
@@ -51,7 +51,7 @@ class TextConverter:
             
             for priority in ["critical", "high", "medium", "low"]:
                 if by_priority[priority]:
-                    priority_icon = {"critical": "🚨", "high": "⚡", "medium": "📋", "low": "💭"}[priority]
+                    priority_icon = {"critical": "CRITICAL", "high": "HIGH", "medium": "MEDIUM", "low": "LOW"}[priority]
                     lines.append(f"   {priority_icon} **{priority.title()} Priority:**")
                     
                     for suggestion in by_priority[priority]:
@@ -63,7 +63,7 @@ class TextConverter:
         # Add metadata summary
         if response_data.metadata:
             lines.append("")
-            lines.append("📊 **Summary:**")
+            lines.append("**Summary:**")
             for key, value in response_data.metadata.items():
                 if isinstance(value, dict):
                     lines.append(f"   {key}: {json.dumps(value, indent=2)}")

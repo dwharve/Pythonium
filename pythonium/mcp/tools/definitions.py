@@ -160,39 +160,44 @@ def get_tool_definitions() -> list:
             }
         ),
         types.Tool(
-            name="mark_issue",
-            description="Mark an issue as true positive, false positive, or set its status. Use this to classify issues and track their resolution progress.",
+            name="update_issue",
+            description="Update an issue's classification, status, severity, message, or add notes. Use this to classify issues and track their resolution progress.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "issue_hash": {
                         "type": "string",
-                        "description": "Hash of the issue to mark (get from list_tracked_issues output)."
+                        "description": "Hash of the issue to update (get from list_issues output)."
                     },
                     "classification": {
                         "type": "string",
                         "enum": ["unclassified", "true_positive", "false_positive"],
-                        "description": "Classification of the issue (default: unclassified)."
+                        "description": "Classification of the issue (optional)."
                     },
                     "status": {
                         "type": "string",
                         "enum": ["pending", "work_in_progress", "completed"],
                         "description": "Status of the issue (optional)."
                     },
+                    "severity": {
+                        "type": "string",
+                        "enum": ["info", "warn", "error"],
+                        "description": "Severity level of the issue (optional)."
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Updated issue message (optional)."
+                    },
                     "notes": {
                         "type": "string",
-                        "description": "Notes about the issue (optional)."
-                    },
-                    "assigned_to": {
-                        "type": "string",
-                        "description": "Person assigned to work on this issue (optional)."
+                        "description": "Note to add to the issue (optional)."
                     }
                 },
                 "required": ["issue_hash"]
             }
         ),
         types.Tool(
-            name="list_tracked_issues",
+            name="list_issues",
             description="List tracked issues with optional filtering by classification, status, or project. Shows issue hashes needed for other operations.",
             inputSchema={
                 "type": "object",
@@ -210,110 +215,20 @@ def get_tool_definitions() -> list:
                         "type": "string",
                         "enum": ["pending", "work_in_progress", "completed"],
                         "description": "Filter by status (optional)."
-                    },
-                    "include_suppressed": {
-                        "type": "boolean",
-                        "description": "Whether to include suppressed issues (default: false)."
                     }
                 },
                 "required": []
             }
         ),
         types.Tool(
-            name="get_issue_info",
-            description="Get detailed information about a specific tracked issue including its original analysis data and tracking metadata.",
+            name="get_issue",
+            description="Get detailed information about a specific tracked issue including its analysis data and tracking metadata.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "issue_hash": {
                         "type": "string",
-                        "description": "Hash of the issue to get information for (get from list_tracked_issues output)."
-                    }
-                },
-                "required": ["issue_hash"]
-            }
-        ),
-        types.Tool(
-            name="suppress_issue",
-            description="Suppress or unsuppress an issue. Suppressed issues won't appear in future analyze_code results but remain tracked.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "issue_hash": {
-                        "type": "string",
-                        "description": "Hash of the issue to suppress/unsuppress."
-                    },
-                    "suppress": {
-                        "type": "boolean",
-                        "description": "Whether to suppress (true) or unsuppress (false) the issue (default: true)."
-                    }
-                },
-                "required": ["issue_hash"]
-            }
-        ),
-        types.Tool(
-            name="get_tracking_statistics",
-            description="Get statistics about issue tracking including counts by classification, status, and project.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "project_path": {
-                        "type": "string",
-                        "description": "Path to specific project to get statistics for (optional, gets stats for all projects if not provided)."
-                    }
-                },
-                "required": []
-            }
-        ),
-        types.Tool(
-            name="add_agent_note",
-            description="Add an agent-generated note to an issue for tracking agent work and investigation history.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "issue_hash": {
-                        "type": "string",
-                        "description": "Hash of the issue to add notes to (get from list_tracked_issues output)."
-                    },
-                    "agent_action": {
-                        "type": "string",
-                        "description": "Type of action taken by the agent (e.g., 'investigated', 'fixed', 'classified', 'analyzed')."
-                    },
-                    "investigation_details": {
-                        "type": "string",
-                        "description": "Details about what the agent found during investigation (optional)."
-                    },
-                    "resolution_details": {
-                        "type": "string",
-                        "description": "Details about what the agent did to address the issue (optional)."
-                    }
-                },
-                "required": ["issue_hash"]
-            }
-        ),
-        types.Tool(
-            name="get_agent_actions",
-            description="Get the history of agent actions and notes on a specific issue to understand previous work done.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "issue_hash": {
-                        "type": "string",
-                        "description": "Hash of the issue to get agent action history for (get from list_tracked_issues output)."
-                    }
-                },
-                "required": ["issue_hash"]
-            }
-        ),
-        types.Tool(
-            name="investigate_issue",
-            description="Automatically investigate an issue and add agent notes about findings. This tool analyzes the code context, generates investigation details, and records the work in the tracking system.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "issue_hash": {
-                        "type": "string",
-                        "description": "Hash of the issue to investigate (get from list_tracked_issues output)."
+                        "description": "Hash of the issue to get information for (get from list_issues output)."
                     }
                 },
                 "required": ["issue_hash"]
@@ -346,7 +261,7 @@ def get_tool_definitions() -> list:
             }
         ),
         types.Tool(
-            name="get_next_issue_to_work",
+            name="get_next_issue",
             description="Get details of the next issue that needs to be worked on. Returns the next actionable issue (first unclassified or pending issue) to streamline agent workflows.",
             inputSchema={
                 "type": "object",
@@ -362,13 +277,23 @@ def get_tool_definitions() -> list:
                             "enum": ["unclassified", "pending", "work_in_progress"]
                         },
                         "description": "Priority order for selecting issues (default: ['unclassified', 'pending', 'work_in_progress'])."
-                    },
-                    "include_suppressed": {
-                        "type": "boolean",
-                        "description": "Whether to include suppressed issues (default: false)."
                     }
                 },
                 "required": []
+            }
+        ),
+        types.Tool(
+            name="investigate_issue",
+            description="Automatically investigate an issue and record findings. Analyzes code context, generates investigation details, and adds notes to track agent work.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "issue_hash": {
+                        "type": "string",
+                        "description": "Hash of the issue to investigate (get from list_issues output)."
+                    }
+                },
+                "required": ["issue_hash"]
             }
         )
     ]

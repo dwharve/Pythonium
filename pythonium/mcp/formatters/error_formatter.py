@@ -21,7 +21,7 @@ class ErrorFormatter(BaseResponseFormatter):
         error_type: str = "general",
         recovery_suggestions: List[ActionSuggestion] = None
     ) -> ResponseData:
-        """Alias for format_error to ensure backward compatibility."""
+        """Alias for format_error for consistency."""
         return self.format_error(
             error_message=error_message,
             error_type=error_type,
@@ -70,7 +70,7 @@ class ErrorFormatter(BaseResponseFormatter):
         
         return ResponseData(
             type=ResponseType.ERROR,
-            message=f"❌ Error: {error_message}",
+            message=f"Error: {error_message}",
             workflow_context=WorkflowContext(
                 current_stage=WorkflowStage.DISCOVERY,  # Restart workflow
                 blockers=[error_message]

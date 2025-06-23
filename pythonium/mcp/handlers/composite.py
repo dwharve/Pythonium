@@ -2,7 +2,7 @@
 Composite MCP tool handler that combines all handler modules.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, TYPE_CHECKING
 
 try:
     import mcp.types as types
@@ -13,24 +13,30 @@ except ImportError:
 from .analysis import AnalysisHandlers
 from .execution import ExecutionHandlers
 from .issue_tracking import IssueTrackingHandlers
-from .statistics_and_agents import StatisticsAndAgentHandlers
+
+if TYPE_CHECKING:
+    from ..services import ServiceRegistry
 
 
 class ToolHandlers(
     AnalysisHandlers,
     ExecutionHandlers, 
-    IssueTrackingHandlers,
-    StatisticsAndAgentHandlers
+    IssueTrackingHandlers
 ):
     """
     Composite MCP tool handler that provides all functionality.
     
     This class inherits from all specialized handler classes to provide
     a unified interface for MCP tool calls. It maintains compatibility
-    with the original handlers.py interface.
+    with the original handlers.py interface while using the new service layer.
     """
     
-    def __init__(self, server_instance):
-        """Initialize the composite handler with the server instance."""
+    def __init__(self, service_registry: 'ServiceRegistry'):
+        """
+        Initialize the composite handler with the service registry.
+        
+        Args:
+            service_registry: Registry providing access to all services
+        """
         # Only call one parent __init__ since they all use the same BaseHandler
-        super().__init__(server_instance)
+        super().__init__(service_registry)

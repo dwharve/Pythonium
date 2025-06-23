@@ -36,14 +36,14 @@ class IssueFormatter(BaseResponseFormatter):
                     ActionSuggestion(
                         action="start_resolution",
                         description="Begin working on this issue",
-                        tool_call="mark_issue",
+                        tool_call="update_issue",
                         parameters={"issue_hash": issue_hash, "status": "work_in_progress"},
                         priority="high"
                     ),
                     ActionSuggestion(
                         action="investigate_further",
                         description="Gather more context about this issue",
-                        tool_call="investigate_issue",
+                        tool_call="get_next_issue",
                         parameters={"issue_hash": issue_hash},
                         priority="medium"
                     )
@@ -54,7 +54,7 @@ class IssueFormatter(BaseResponseFormatter):
                 suggestions.append(ActionSuggestion(
                     action="add_progress_notes",
                     description="Document progress and findings",
-                    tool_call="add_agent_note",
+                    tool_call="update_issue",
                     parameters={"issue_hash": issue_hash},
                     priority="medium"
                 ))
@@ -69,9 +69,9 @@ class IssueFormatter(BaseResponseFormatter):
         
         elif classification == "false_positive":
             suggestions.append(ActionSuggestion(
-                action="suppress_issue",
+                action="update_issue",
                 description="Suppress this false positive to clean up future analyses",
-                tool_call="suppress_issue",
+                tool_call="update_issue",
                 parameters={"issue_hash": issue_hash, "suppress": True},
                 priority="medium"
             ))
@@ -81,23 +81,23 @@ class IssueFormatter(BaseResponseFormatter):
             ActionSuggestion(
                 action="view_all_issues",
                 description="See all tracked issues for this project",
-                tool_call="list_tracked_issues",
+                tool_call="list_issues",
                 priority="low"
             ),
             ActionSuggestion(
                 action="get_issue_details",
                 description="View detailed information about this issue",
-                tool_call="get_issue_info",
+                tool_call="get_issue",
                 parameters={"issue_hash": issue_hash},
                 priority="low"
             )
         ])
         
-        message = f"✅ Issue {issue_hash} marked as {classification}"
+        message = f"Issue {issue_hash} marked as {classification}"
         if status:
             message += f" with status: {status}"
         if notes:
-            message += f"\n📝 Notes: {notes}"
+            message += f"\nNotes: {notes}"
         
         return ResponseData(
             type=ResponseType.SUCCESS,
@@ -130,7 +130,7 @@ class IssueFormatter(BaseResponseFormatter):
         if not issues:
             return ResponseData(
                 type=ResponseType.INFO,
-                message="📋 No tracked issues found",
+                message="No tracked issues found",
                 data=[],
                 workflow_context=WorkflowContext(
                     current_stage=WorkflowStage.COMPLETION,
@@ -165,7 +165,7 @@ class IssueFormatter(BaseResponseFormatter):
             suggestions.append(ActionSuggestion(
                 action="classify_unclassified",
                 description=f"Classify {by_classification['unclassified']} unclassified issues",
-                tool_call="mark_issue",
+                tool_call="update_issue",
                 priority="high"
             ))
         
@@ -173,7 +173,7 @@ class IssueFormatter(BaseResponseFormatter):
             suggestions.append(ActionSuggestion(
                 action="start_pending_work",
                 description=f"Begin work on {by_status['pending']} pending issues",
-                tool_call="mark_issue",
+                tool_call="update_issue",
                 priority="medium"
             ))
         
@@ -181,7 +181,7 @@ class IssueFormatter(BaseResponseFormatter):
             suggestions.append(ActionSuggestion(
                 action="continue_in_progress",
                 description=f"Continue work on {by_status['work_in_progress']} issues in progress",
-                tool_call="add_agent_note",
+                tool_call="update_issue",
                 priority="high"
             ))
         
@@ -190,13 +190,13 @@ class IssueFormatter(BaseResponseFormatter):
             ActionSuggestion(
                 action="get_statistics",
                 description="View detailed project statistics",
-                tool_call="get_tracking_statistics",
+                tool_call="list_issues",
                 priority="low"
             ),
             ActionSuggestion(
                 action="investigate_specific",
                 description="Investigate a specific issue for more context",
-                tool_call="investigate_issue",
+                tool_call="get_next_issue",
                 priority="medium"
             )
         ])
@@ -209,7 +209,7 @@ class IssueFormatter(BaseResponseFormatter):
             elif by_status.get("work_in_progress", 0) > 0:
                 stage = WorkflowStage.RESOLUTION
         
-        message_parts = [f"📋 Found {len(issues)} tracked issues"]
+        message_parts = [f"Found {len(issues)} tracked issues"]
         
         if filters:
             filter_desc = []
@@ -256,21 +256,21 @@ class IssueFormatter(BaseResponseFormatter):
                 ActionSuggestion(
                     action="classify_true_positive",
                     description="Mark as true positive if this is a real issue",
-                    tool_call="mark_issue",
+                    tool_call="update_issue",
                     parameters={"issue_hash": issue_hash, "classification": "true_positive"},
                     priority="high"
                 ),
                 ActionSuggestion(
                     action="classify_false_positive", 
                     description="Mark as false positive if this is not a real issue",
-                    tool_call="mark_issue",
+                    tool_call="update_issue",
                     parameters={"issue_hash": issue_hash, "classification": "false_positive"},
                     priority="high"
                 ),
                 ActionSuggestion(
                     action="investigate_more",
                     description="Investigate further to understand the issue context",
-                    tool_call="investigate_issue",
+                    tool_call="get_next_issue",
                     parameters={"issue_hash": issue_hash},
                     priority="medium"
                 )
@@ -280,14 +280,14 @@ class IssueFormatter(BaseResponseFormatter):
                 ActionSuggestion(
                     action="start_work",
                     description="Begin working on this issue",
-                    tool_call="mark_issue",
+                    tool_call="update_issue",
                     parameters={"issue_hash": issue_hash, "status": "work_in_progress"},
                     priority="high"
                 ),
                 ActionSuggestion(
                     action="assign_issue",
                     description="Assign this issue to someone",
-                    tool_call="mark_issue",
+                    tool_call="update_issue",
                     parameters={"issue_hash": issue_hash},
                     priority="medium"
                 )
@@ -297,14 +297,14 @@ class IssueFormatter(BaseResponseFormatter):
                 ActionSuggestion(
                     action="add_progress_note",
                     description="Add a note about current progress",
-                    tool_call="add_agent_note",
+                    tool_call="update_issue",
                     parameters={"issue_hash": issue_hash, "agent_action": "investigated"},
                     priority="medium"
                 ),
                 ActionSuggestion(
                     action="mark_completed",
                     description="Mark as completed if work is done",
-                    tool_call="mark_issue",
+                    tool_call="update_issue",
                     parameters={"issue_hash": issue_hash, "status": "completed"},
                     priority="high"
                 )
@@ -313,16 +313,16 @@ class IssueFormatter(BaseResponseFormatter):
         # Add general suggestions
         suggestions.extend([
             ActionSuggestion(
-                action="suppress_issue",
+                action="update_issue",
                 description="Suppress this issue if it shouldn't appear in future analyses",
-                tool_call="suppress_issue",
+                tool_call="update_issue",
                 parameters={"issue_hash": issue_hash},
                 priority="low"
             ),
             ActionSuggestion(
                 action="view_agent_history",
                 description="View history of agent actions on this issue",
-                tool_call="get_agent_actions",
+                tool_call="list_issues",
                 parameters={"issue_hash": issue_hash},
                 priority="low"
             )
@@ -340,7 +340,7 @@ class IssueFormatter(BaseResponseFormatter):
         stage = stage_map.get((classification, status), WorkflowStage.INVESTIGATION)
         
         detector_id = original.get("detector_id", "unknown") if original else "unknown"
-        message = f"🔍 Issue Details: {issue_hash} ({detector_id})"
+        message = f"Issue Details: {issue_hash} ({detector_id})"
         
         return ResponseData(
             type=ResponseType.SUCCESS,
@@ -382,7 +382,7 @@ class IssueFormatter(BaseResponseFormatter):
                 ActionSuggestion(
                     action="document_reason",
                     description="Add a note explaining why this issue was suppressed",
-                    tool_call="add_agent_note",
+                    tool_call="update_issue",
                     parameters={"issue_hash": issue_hash, "agent_action": "suppressed"},
                     priority="low"
                 )
@@ -392,14 +392,14 @@ class IssueFormatter(BaseResponseFormatter):
                 ActionSuggestion(
                     action="reclassify_issue",
                     description="Reclassify this issue now that it's active again",
-                    tool_call="mark_issue",
+                    tool_call="update_issue",
                     parameters={"issue_hash": issue_hash},
                     priority="high"
                 ),
                 ActionSuggestion(
                     action="investigate_again",
                     description="Investigate why this issue needs to be unsuppressed",
-                    tool_call="investigate_issue",
+                    tool_call="get_next_issue",
                     parameters={"issue_hash": issue_hash},
                     priority="medium"
                 )

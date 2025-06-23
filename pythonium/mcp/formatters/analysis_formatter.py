@@ -1,7 +1,18 @@
 """
 Analysis results formatter.
 
-This module handles formatting of code analysis results with workflow guidance.
+This module handles formatting of code ana            ActionSuggestion(
+                action="classify_issues",
+                description="Mark issues as true/false positives for better tracking",
+                tool_call="update_issue",
+                priority="high"
+            ),
+            ActionSuggestion(
+                action="review_statistics",
+                description="View project-wide issue statistics and trends",
+                tool_call="list_issues",
+                priority="low"
+            )s with workflow guidance.
 """
 
 from typing import List
@@ -30,7 +41,7 @@ class AnalysisFormatter(BaseResponseFormatter):
         if not issues:
             return ResponseData(
                 type=ResponseType.SUCCESS,
-                message=f"✅ No code health issues found in {project_path}",
+                message=f"No code health issues found in {project_path}",
                 data=[],
                 workflow_context=WorkflowContext(
                     current_stage=WorkflowStage.COMPLETION,
@@ -59,7 +70,7 @@ class AnalysisFormatter(BaseResponseFormatter):
             suggestions.append(ActionSuggestion(
                 action="investigate_new_issues",
                 description=f"Investigate {new_count} newly discovered issues",
-                tool_call="investigate_issue",
+                tool_call="get_next_issue",
                 priority="high"
             ))
         
@@ -67,7 +78,7 @@ class AnalysisFormatter(BaseResponseFormatter):
             suggestions.append(ActionSuggestion(
                 action="review_tracked_issues",
                 description=f"Review {tracked_count} issues already being tracked",
-                tool_call="list_tracked_issues",
+                tool_call="list_issues",
                 priority="medium"
             ))
         
@@ -76,19 +87,19 @@ class AnalysisFormatter(BaseResponseFormatter):
             ActionSuggestion(
                 action="classify_issues",
                 description="Mark issues as true/false positives for better tracking",
-                tool_call="mark_issue",
+                tool_call="update_issue",
                 priority="high"
             ),
             ActionSuggestion(
                 action="get_statistics",
                 description="View project-wide issue statistics and trends",
-                tool_call="get_tracking_statistics",
+                tool_call="list_issues",
                 priority="low"
             )
         ])
         
         message_parts = [
-            f"🔍 Found {len(issues)} code health issues in {project_path}"
+            f"Found {len(issues)} code health issues in {project_path}"
         ]
         
         if new_count > 0:

@@ -100,7 +100,7 @@ class StatisticsFormatter(BaseResponseFormatter):
             progress = 100
         
         scope = f"for {project_path}" if project_path else "across all projects"
-        message = f"📊 Issue tracking statistics {scope}: {total_tracked} total, {active} active"
+        message = f"Issue tracking statistics {scope}: {total_tracked} total, {active} active"
         
         return ResponseData(
             type=ResponseType.SUCCESS,

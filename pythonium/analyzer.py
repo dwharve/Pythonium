@@ -89,8 +89,7 @@ class Analyzer:
         loader: CodeLoader instance for reading source files
         graph: CodeGraph representation of the analyzed code
         cache: Analysis cache for performance optimization
-        parallel_analyzer: Parallel execution manager
-        git_analyzer: Git integration for incremental analysis
+        parallel_analyzer: Parallel execution manager        git_analyzer: Git integration for incremental analysis
         hook_manager: Extensibility hook manager
     """
     
@@ -102,9 +101,9 @@ class Analyzer:
         use_cache: bool = True,
         use_parallel: bool = True,
         use_incremental: bool = True,
-        enable_suppression: bool = True,
-        enable_deduplication: bool = True,
-        enable_filtering: bool = True,
+        enable_suppression: bool = False,
+        enable_deduplication: bool = False,
+        enable_filtering: bool = False,
     ) -> None:
         """
         Initialize the analyzer.

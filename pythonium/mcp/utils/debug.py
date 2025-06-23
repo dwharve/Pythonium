@@ -1,5 +1,5 @@
 """
-Enhanced debug logging functions for MCP server operations.
+Debug logging functions for MCP server operations.
 """
 
 import time
@@ -132,7 +132,7 @@ def profile_operation(name: str):
     return decorator
 
 def setup_debug_logging() -> None:
-    """Set up enhanced debug logging for the MCP server."""
+    """Set up debug logging for the MCP server."""
     # Create debug log file in the project directory
     log_file = Path.cwd() / "pythonium_mcp_debug.log"
     

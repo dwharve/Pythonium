@@ -1,10 +1,13 @@
 """
-Main MCP server implementation for Pythonium.
+Modern MCP server implementation for Pythonium.
+
+This implementation uses the new service layer, tool registry,
+and middleware for maintainability and testability.
 """
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable
 
 try:
     import mcp.server.stdio
@@ -18,15 +21,27 @@ except ImportError:
 
 from pythonium.analyzer import Analyzer
 from pythonium.cli import find_project_root, get_or_create_config
-from .debug import setup_debug_logging, setup_minimal_logging, profiler, profile_operation, logger, info_log, warning_log, error_log
+
+from .utils.debug import setup_debug_logging, setup_minimal_logging, profiler, profile_operation, logger, info_log, warning_log, error_log
+from .services import ServiceRegistry
+from .core import ToolRegistry, Middleware, MiddlewareChain
+from .core.middleware import LoggingMiddleware, ValidationMiddleware, ErrorHandlingMiddleware, PerformanceMiddleware
 from .handlers import ToolHandlers
-from .tool_definitions import get_tool_definitions
-from .analysis_tools import list_detectors, get_detector_info, analyze_issues, debug_profile
-from .configuration_tools import get_configuration_schema
-from .config_utilities import configure_analyzer_logging
+from .tools.definitions import get_tool_definitions
+from .tools.analysis import list_detectors, get_detector_info, analyze_issues, debug_profile
+from .tools.configuration import get_configuration_schema, configure_analyzer_logging
+
 
 class PythoniumMCPServer:
-    """MCP server for Pythonium code health analysis."""
+    """
+    MCP server for Pythonium code health analysis.
+    
+    This server implementation provides:
+    - Service layer with dependency injection
+    - Tool registry for dynamic tool management
+    - Middleware chain for cross-cutting concerns
+    - Robust error handling and logging
+    """
     
     def __init__(self, name: str = "pythonium", version: str = "0.1.0", debug: bool = False):
         """Initialize the MCP server."""
@@ -36,37 +51,60 @@ class PythoniumMCPServer:
                 "pip install mcp"
             )
         
-        # Setup debug logging only if requested
+        # Setup logging
         if debug:
             setup_debug_logging()
             info_log(f"Initializing Pythonium MCP Server v{version}")
         else:
-            # Setup minimal logging - only warnings and errors to console
             setup_minimal_logging()
             warning_log(f"Initializing Pythonium MCP Server v{version}")
         
-        # Configure analyzer logging to respect debug mode
+        # Configure analyzer logging
         configure_analyzer_logging(debug)
         
+        # Initialize core components
         self.server = Server(name, version)
         self.name = name
         self.version = version
         self.debug = debug
         
-        # Initialize tool handlers
-        self.handlers = ToolHandlers(self)
+        # Initialize service registry
+        self.services = ServiceRegistry()
+        
+        # Initialize tool registry and middleware
+        self.tool_registry = ToolRegistry()
+        self.middleware_chain = MiddlewareChain()
+        
+        # Setup middleware
+        self._setup_middleware()
+        
+        # Initialize handlers with service registry
+        self.handlers = ToolHandlers(self.services)
         
         # Dynamically discover available detectors
         self._detector_info = self._discover_detectors()
+        
+        # Register tools
+        self._register_tools()
         
         # Setup MCP handlers
         self._setup_handlers()
         
         if debug:
             info_log(f"MCP Server initialized with {len(self.available_detectors)} detectors")
+            info_log(f"Tool registry: {self.tool_registry.get_registry_info()}")
         else:
-            # Log at WARNING level so it shows in minimal logging mode
             warning_log(f"MCP Server initialized with {len(self.available_detectors)} detectors")
+    
+    def _setup_middleware(self) -> None:
+        """Setup the middleware chain."""
+        # Add middleware in execution order
+        self.middleware_chain.add(LoggingMiddleware())
+        self.middleware_chain.add(ValidationMiddleware())
+        self.middleware_chain.add(ErrorHandlingMiddleware())
+        self.middleware_chain.add(PerformanceMiddleware())
+        
+        info_log(f"Middleware chain setup with {len(self.middleware_chain._middleware)} components")
     
     @profile_operation("discover_detectors")
     def _discover_detectors(self) -> Dict[str, Dict[str, Any]]:
@@ -104,6 +142,61 @@ class PythoniumMCPServer:
         """Get list of available detector IDs."""
         return list(self._detector_info.keys())
     
+    def _register_tools(self) -> None:
+        """Register all tools with the tool registry."""
+        tools = get_tool_definitions()
+        
+        for tool in tools:
+            self.tool_registry.register(
+                name=tool.name,
+                handler=self._get_tool_handler(tool.name),
+                schema=tool,
+                category=self._get_tool_category(tool.name),
+                description=tool.description
+            )
+        
+        info_log(f"Registered {len(tools)} tools with registry")
+    
+    def _get_tool_category(self, tool_name: str) -> str:
+        """Get category for a tool."""
+        category_map = {
+            'analyze_code': 'Code Analysis',
+            'analyze_inline_code': 'Code Analysis', 
+            'execute_code': 'Code Execution',
+            'list_detectors': 'Configuration',
+            'get_detector_info': 'Configuration',
+            'analyze_issues': 'Issue Management',
+            'get_configuration_schema': 'Configuration',
+            'debug_profile': 'Debugging',
+            'update_issue': 'Issue Tracking',
+            'list_issues': 'Issue Tracking',
+            'get_issue': 'Issue Tracking',
+            'get_next_issue': 'Issue Tracking',
+            'investigate_issue': 'Issue Tracking',
+            'repair_python_syntax': 'Code Repair'
+        }
+        return category_map.get(tool_name, 'General')
+    
+    def _get_tool_handler(self, tool_name: str) -> Callable:
+        """Get handler for a tool."""
+        handler_map = {
+            'analyze_code': self.handlers.analyze_code,
+            'analyze_inline_code': self.handlers.analyze_inline_code,
+            'execute_code': self.handlers.execute_code,
+            'list_detectors': lambda args: list_detectors(self, args),
+            'get_detector_info': lambda args: get_detector_info(self, args),
+            'analyze_issues': lambda args: analyze_issues(self, args),
+            'get_configuration_schema': lambda args: get_configuration_schema(self, args),
+            'debug_profile': lambda args: debug_profile(self, args),
+            'update_issue': self.handlers.update_issue,
+            'list_issues': self.handlers.list_issues,
+            'get_issue': self.handlers.get_issue,
+            'get_next_issue': self.handlers.get_next_issue,
+            'investigate_issue': self.handlers.investigate_issue,
+            'repair_python_syntax': self.handlers.repair_python_syntax
+        }
+        return handler_map.get(tool_name, lambda args: [types.TextContent(type="text", text=f"Unknown tool: {tool_name}")])
+    
     def _setup_handlers(self) -> None:
         """Set up MCP message handlers."""
         
@@ -117,7 +210,7 @@ class PythoniumMCPServer:
         
         @self.server.call_tool()
         async def handle_call_tool(name: str, arguments):
-            """Handle tool calls with profiling."""
+            """Handle tool calls through middleware chain."""
             info_log(f"call_tool handler called - tool: {name}, args: {arguments}")
             if arguments is None:
                 arguments = {}
@@ -125,44 +218,20 @@ class PythoniumMCPServer:
             profiler.start_operation(f"tool_call_{name}", tool=name, args_keys=list(arguments.keys()))
             
             try:
-                if name == "analyze_code":
-                    return await self.handlers.analyze_code(arguments)
-                elif name == "analyze_inline_code":
-                    return await self.handlers.analyze_inline_code(arguments)
-                elif name == "execute_code":
-                    return await self.handlers.execute_code(arguments)
-                elif name == "list_detectors":
-                    return await list_detectors(self, arguments)
-                elif name == "get_detector_info":
-                    return await get_detector_info(self, arguments)
-                elif name == "analyze_issues":
-                    return await analyze_issues(self, arguments)
-                elif name == "get_configuration_schema":
-                    return await get_configuration_schema(self, arguments)
-                elif name == "debug_profile":
-                    return await debug_profile(self, arguments)
-                elif name == "mark_issue":
-                    return await self.handlers.mark_issue(arguments)
-                elif name == "list_tracked_issues":
-                    return await self.handlers.list_tracked_issues(arguments)
-                elif name == "get_issue_info":
-                    return await self.handlers.get_issue_info(arguments)
-                elif name == "suppress_issue":
-                    return await self.handlers.suppress_issue(arguments)
-                elif name == "get_tracking_statistics":
-                    return await self.handlers.get_tracking_statistics(arguments)
-                elif name == "add_agent_note":
-                    return await self.handlers.add_agent_note(arguments)
-                elif name == "get_agent_actions":
-                    return await self.handlers.get_agent_actions(arguments)
-                elif name == "investigate_issue":
-                    return await self.handlers.investigate_issue(arguments)
-                elif name == "get_next_issue_to_work":
-                    return await self.handlers.get_next_issue_to_work(arguments)
-                elif name == "repair_python_syntax":
-                    return await self.handlers.repair_python_syntax(arguments)
-                else:
-                    raise ValueError(f"Unknown tool: {name}")
+                # Execute through middleware chain if available
+                if self.tool_registry.is_registered(name):
+                    tool_info = self.tool_registry.get_tool_info(name)
+                    if tool_info and self.middleware_chain:
+                        # Wrapper to match middleware signature
+                        async def tool_wrapper(tool_name: str, args: Dict[str, Any]) -> List[types.Content]:
+                            return await tool_info.handler(args)
+                        return await self.middleware_chain.process(name, arguments, tool_wrapper)
+                    elif tool_info:
+                        return await tool_info.handler(arguments)
+                
+                # Direct execution if no middleware
+                return await self._execute_tool_direct(name, arguments)
+                
             except Exception as e:
                 error_log("Error handling tool call: %s", str(e))
                 profiler.end_operation(success=False, error=str(e))
@@ -173,7 +242,58 @@ class PythoniumMCPServer:
             finally:
                 if profiler.current_operation and profiler.current_operation.get("status") == "running":
                     profiler.end_operation(success=True)
-
+    
+    async def _execute_tool_direct(self, name: str, arguments: Dict[str, Any]) -> List[types.Content]:
+        """Direct tool execution fallback."""
+        if name == "analyze_code":
+            return await self.handlers.analyze_code(arguments)
+        elif name == "analyze_inline_code":
+            return await self.handlers.analyze_inline_code(arguments)
+        elif name == "execute_code":
+            return await self.handlers.execute_code(arguments)
+        elif name == "list_detectors":
+            return await list_detectors(self, arguments)
+        elif name == "get_detector_info":
+            return await get_detector_info(self, arguments)
+        elif name == "analyze_issues":
+            return await analyze_issues(self, arguments)
+        elif name == "get_configuration_schema":
+            return await get_configuration_schema(self, arguments)
+        elif name == "debug_profile":
+            return await debug_profile(self, arguments)
+        elif name == "update_issue":
+            return await self.handlers.update_issue(arguments)
+        elif name == "list_issues":
+            return await self.handlers.list_issues(arguments)
+        elif name == "get_issue":
+            return await self.handlers.get_issue(arguments)
+        elif name == "get_next_issue":
+            return await self.handlers.get_next_issue(arguments)
+        elif name == "investigate_issue":
+            return await self.handlers.investigate_issue(arguments)
+        elif name == "repair_python_syntax":
+            return await self.handlers.repair_python_syntax(arguments)
+        else:
+            raise ValueError(f"Unknown tool: {name}")
+    
+    def get_server_info(self) -> Dict[str, Any]:
+        """Get comprehensive server information."""
+        return {
+            "name": self.name,
+            "version": self.version,
+            "debug": self.debug,
+            "detectors": {
+                "count": len(self.available_detectors),
+                "list": self.available_detectors
+            },
+            "services": {
+                name: type(service).__name__ 
+                for name, service in self.services._services.items()
+            },
+            "tool_registry": self.tool_registry.get_registry_info(),
+            "middleware": self.middleware_chain.get_middleware_info()
+        }
+    
     async def run_stdio(self):
         """Run the MCP server with stdio transport."""
         import mcp.server.stdio

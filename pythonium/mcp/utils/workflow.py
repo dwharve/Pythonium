@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 
-from .response_formatter import WorkflowStage, ActionSuggestion, ResponseType
+from ..formatters import WorkflowStage, ActionSuggestion, ResponseType
 
 
 class IssueComplexity(Enum):
