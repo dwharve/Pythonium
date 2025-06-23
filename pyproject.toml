@@ -27,6 +27,7 @@ dependencies = [
     "networkx>=2.6.0",
     "radon>=5.1.0",
     "pyyaml>=6.0",
+    "mcp>=0.9.0",
 ]
 
 [project.optional-dependencies]
@@ -37,9 +38,6 @@ dev = [
     "black>=22.0.0",
     "isort>=5.0.0",
     "mypy>=0.900",
-]
-mcp = [
-    "mcp>=0.9.0",
 ]
 
 [project.scripts]

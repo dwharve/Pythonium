@@ -5,18 +5,14 @@ This module has been refactored into a modular structure for better maintainabil
 The main implementation is now in the mcp package.
 """
 
-# Check MCP availability early
-try:
-    import mcp.server.stdio
-    import mcp.types
-    MCP_AVAILABLE = True
-except ImportError:
-    MCP_AVAILABLE = False
+
+import mcp.server.stdio
+import mcp.types
 
 from pythonium.mcp import PythoniumMCPServer
 
 # Re-export for backward compatibility
-__all__ = ["PythoniumMCPServer", "MCP_AVAILABLE", "main"]
+__all__ = ["PythoniumMCPServer", "main"]
 
 def main():
     """Main entry point for MCP server."""

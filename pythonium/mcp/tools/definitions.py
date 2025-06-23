@@ -3,17 +3,11 @@ Tool definitions for the Pythonium MCP server.
 Static tool definitions separated from main server logic.
 """
 
-try:
-    import mcp.types as types
-    MCP_AVAILABLE = True
-except ImportError:
-    MCP_AVAILABLE = False
+import mcp.types as types
 
 
 def get_tool_definitions() -> list:
     """Get MCP tool definitions."""
-    if not MCP_AVAILABLE:
-        return []
     
     return [
         types.Tool(

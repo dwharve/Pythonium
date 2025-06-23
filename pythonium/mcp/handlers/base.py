@@ -5,11 +5,7 @@ Base handler class with shared functionality for MCP tool handlers.
 from pathlib import Path
 from typing import Any, Dict, List, TYPE_CHECKING
 
-try:
-    import mcp.types as types
-    MCP_AVAILABLE = True
-except ImportError:
-    MCP_AVAILABLE = False
+import mcp.types as types
 
 from ..utils.debug import profiler, profile_operation, logger, info_log, warning_log, error_log
 from ..formatters import ResponseFormatter, ActionSuggestion

@@ -4,11 +4,7 @@ Composite MCP tool handler that combines all handler modules.
 
 from typing import Any, Dict, List, TYPE_CHECKING
 
-try:
-    import mcp.types as types
-    MCP_AVAILABLE = True
-except ImportError:
-    MCP_AVAILABLE = False
+import mcp.types as types
 
 from .analysis import AnalysisHandlers
 from .execution import ExecutionHandlers

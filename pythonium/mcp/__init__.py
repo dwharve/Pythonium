@@ -11,6 +11,8 @@ The server implementation features:
 - Robust error handling and validation
 """
 
+"""Expose :class:`PythoniumMCPServer`."""
+
 from .server import PythoniumMCPServer
 
 __all__ = ["PythoniumMCPServer"]
