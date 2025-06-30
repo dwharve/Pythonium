@@ -1,193 +1,264 @@
 # Pythonium
 
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+A modular Model Context Protocol (MCP) server designed to enable advanced capabilities for AI agents through a comprehensive plugin-based architecture.
 
-A comprehensive static analysis tool for identifying and reporting code health issues in Python projects. Designed for developers who want to maintain high-quality, maintainable codebases.
+## Overview
+
+Pythonium provides a robust, extensible foundation for building sophisticated AI agent tools and capabilities. Built around the Model Context Protocol specification, it offers a clean separation of concerns through its modular package structure.
+
+## Architecture
+
+### Core Packages
+
+- **`pythonium.common`** - Shared utilities, base classes, and plugin framework foundation
+- **`pythonium.managers`** - Object-oriented management systems for configuration, plugins, resources, and security
+- **`pythonium.tools`** - Comprehensive tool management system with plugin framework
+- **`pythonium.mcp`** - Full-featured MCP server implementation with configuration management
 
 ## Features
 
-### Core Detectors
-- **Dead Code Detection**: Identify unused functions, classes, and modules
-- **Code Clone Detection**: Find exact and near-duplicate code blocks
-- **Alternative Implementation Detection**: Spot competing patterns and duplicate effort
-- **Circular Dependency Detection**: Identify import cycles and dependency tangles
-- **Complexity Hotspots**: Flag functions with high cyclomatic complexity
-- **Security Smell Detection**: Find potential security vulnerabilities
-- **API Consistency Checks**: Enforce consistent coding patterns
-- **Deprecated API Detection**: Find usage of deprecated functions and patterns
-- **Block-Level Clone Detection**: Find duplicate code blocks within and across functions
-- **Semantic Equivalence Detection**: Identify functionally equivalent code implemented differently
-- **Advanced Pattern Recognition**: Detect algorithmic patterns and design pattern opportunities
-- **Stub Implementation Detection**: Identify placeholder, mock, and fallback implementations
+### Plugin Framework
+- Dynamic plugin discovery and loading
+- Dependency resolution and lifecycle management
+- Plugin isolation and sandboxing
+- Extensible tool and manager registration
 
-### Capabilities  
-- **MCP Integration**: Model Context Protocol support for LLM agents
-- **Multiple Output Formats**: Text, JSON, SARIF, HTML reports
-- **Configurable Rules**: Customize thresholds and detector behavior
-- **Extensible Architecture**: Plugin system for custom detectors
-- **Fast Analysis**: Efficient parsing and analysis engine
-- **Persistent Caching**: SQLite cache in project root for fast incremental analysis
+### Tool Categories
+- **File System**: File operations, directory management, content analysis (`pythonium.tools.filesystem`)
+- **Network**: HTTP operations, API interactions, web scraping (`pythonium.tools.network`)
+- **System**: Process management, environment access, monitoring (`pythonium.tools.system`)
 
-## Installation
+### Management Systems
+- **Configuration**: Multi-format config loading with hot-reload
+- **Plugin**: Dynamic plugin lifecycle and dependency management
+- **Resource**: Memory, connection pooling, and resource monitoring
+- **Security**: Authentication, authorization, rate limiting, audit logging
 
-```bash
-# Basic installation
-pip install pythonium
-
-# With MCP support for LLM agents
-pip install pythonium[mcp]
-
-# Development installation
-pip install pythonium[dev]
-```
+### MCP Server
+- Full Model Context Protocol compliance
+- Multiple transport options (stdio, HTTP, WebSocket)
+- Tool registration and capability negotiation
+- Resource management and streaming
+- Prompt template system
 
 ## Quick Start
 
-### Command Line Usage
+### Installation
 
 ```bash
-# Analyze your Python project
-pythonium crawl /path/to/your/project
+# Clone the repository
+git clone https://github.com/dwharve/pythonium.git
+cd pythonium
 
-# Generate HTML dashboard
-pythonium crawl myproject/ --format html --output report.html
+# Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Focus on specific issues
-pythonium crawl myproject/ --fail-on error
+# Install dependencies
+pip install -r requirements.txt
 
-# Run specific detectors only
-pythonium crawl myproject/ --detectors dead_code,security_smell
-
-# List available detectors
-pythonium list-detectors
-
-# Use JSON output for CI/CD integration
-pythonium crawl myproject/ --format json --output issues.json
-
-# Create default configuration file
-pythonium init-config
-
-# Show version
-pythonium version
+# Install in development mode
+pip install -e .
 ```
 
-### MCP Server for LLM Agents
+### Basic Usage
 
 ```bash
-# Start MCP server with stdio transport
-pythonium mcp-server --transport stdio
+# Run the MCP server
+python -m pythonium --help
 
-# Start MCP server with SSE transport (HTTP)
-pythonium mcp-server --transport sse --host localhost --port 8000
+# Start with default configuration
+python -m pythonium serve
 
-# Start with debug logging
-pythonium mcp-server --transport stdio --debug
+# Start with custom configuration
+python -m pythonium serve --config config/server.yaml
+
+# List available tools
+python -m pythonium tools list
+
+# Show server status
+python -m pythonium status
+
+# Alternative: Use installed script
+pythonium --help
+pythonium serve
 ```
 
-### Python API
+## Development
 
-```python
-from pythonium import Analyzer
-from pathlib import Path
+### Setup Development Environment
 
-# Initialize analyzer
-analyzer = Analyzer(root_path=Path("myproject/"))
+```bash
+# Install development dependencies
+pip install -r requirements-dev.txt
 
-# Run analysis
-issues = analyzer.analyze()
+# Install pre-commit hooks
+pre-commit install
 
-# Process results
-for issue in issues:
-    print(f"{issue.severity}: {issue.message}")
-    if issue.location:
-        print(f"  Location: {issue.location}")
+# Run tests
+pytest
+
+# Run tests with coverage
+pytest --cov=pythonium --cov-report=html
+
+# Format code
+black pythonium tests
+isort pythonium tests
+
+# Type checking
+mypy pythonium
+```
+
+### Project Structure
+
+```
+pythonium/
+├── pythonium/           # Main package
+│   ├── common/         # Shared utilities and plugin framework
+│   ├── managers/       # Management systems
+│   ├── tools/          # Tool implementations
+│   ├── mcp/           # MCP server implementation
+│   └── __main__.py    # Module entry point
+├── tests/              # Test suite
+├── docs/               # Documentation
+├── config/             # Configuration files
+└── requirements.txt    # Dependencies
+```
+
+### Testing
+
+The project uses pytest for testing with comprehensive coverage:
+
+- **Unit Tests**: Individual component testing (78 total tests)
+- **Integration Tests**: Package interaction testing  
+- **End-to-End Tests**: Full MCP server functionality
+- **Performance Tests**: Load and performance testing
+
+**Current Status**: 77 tests passing, 1 test failing (dependency injection issue in manager integration)
+
+```bash
+# Run all tests
+pytest
+
+# Run specific test category
+pytest -m unit
+pytest -m integration
+
+# Run with coverage
+pytest --cov=pythonium --cov-report=term-missing
+
+# Quick test run
+pytest -q
 ```
 
 ## Configuration
 
-Create a `.pythonium.yml` file in your project root:
+Pythonium supports multiple configuration formats (YAML, JSON, TOML) with environment variable integration:
 
 ```yaml
-# Enable/disable specific detectors with configuration
-detectors:
-  dead_code:
-    enabled: true
-  clone:
-    enabled: true
-    similarity_threshold: 0.85  # 1.0 for exact clones, <1.0 for near clones
-    min_lines: 4
-  block_clone:
-    enabled: true
-    min_statements: 3
-    similarity_threshold: 0.85
-  semantic_equivalence:
-    enabled: true
-  advanced_patterns:
-    enabled: true
-  security_smell:
-    enabled: true
-  complexity_hotspot:
-    enabled: true
-    max_complexity: 8
-  inconsistent_api:
-    enabled: true
-  alt_implementation:
-    enabled: true
-  circular_deps:
-    enabled: true
-  deprecated_api:
-    enabled: true
-  stub_implementation:
-    enabled: true
+# config/server.yaml
+server:
+  host: "localhost"
+  port: 8080
+  transport: "stdio"  # stdio, http, websocket
 
-# Global ignore patterns (replaces defaults)
-ignore:
-  - "**/tests/**"
-  - "**/__pycache__/**"
-  - "**/venv/**"
+plugins:
+  auto_discover: true
+  plugin_dirs:
+    - "plugins"
+    - "~/.pythonium/plugins"
 
-# Threshold values (merges with defaults)
-thresholds:
-  complexity_cyclomatic: 8
-  clone_similarity: 0.85
-  clone_min_lines: 4
+tools:
+  categories:
+    - filesystem
+    - network
+    - system
 
-# Set severity levels
-severity:
-  dead_code: "warn"
-  clone: "error"
-  block_clone: "warn"
-  semantic_equivalence: "info"
-  advanced_patterns: "info"
-  security_smell: "error"
-  complexity_hotspot: "warn"
-  inconsistent_api: "warn"
-  alt_implementation: "warn"
-  circular_deps: "error"
-  deprecated_api: "warn"
-  stub_implementation: "info"
+logging:
+  level: "INFO"
+  format: "structured"
 ```
 
-## Documentation
+## Plugin Development
 
-For comprehensive documentation, see the [`docs/`](docs/) directory:
+### Creating a Tool Plugin
 
-- **[Creating Custom Detectors](docs/creating-detectors.md)** - Complete guide to writing custom detectors
-- **[Documentation Index](docs/README.md)** - Full documentation structure and links
+```python
+from pythonium.tools.base import BaseTool
+from pythonium.common.types import ToolResult
 
-## Development
+class MyCustomTool(BaseTool):
+    name = "my_custom_tool"
+    description = "A custom tool example"
+    
+    async def execute(self, **kwargs) -> ToolResult:
+        # Implementation here
+        return ToolResult(
+            success=True,
+            data={"result": "Hello from custom tool!"}
+        )
+```
 
-1. Clone the repository
-2. Install development dependencies:
-   ```bash
-   pip install -e ".[dev]"
-   ```
-3. Run tests:
-   ```bash
-   pytest
-   ```
+### Creating a Manager Plugin
+
+```python
+from pythonium.managers.base import BaseManager
+
+class MyCustomManager(BaseManager):
+    name = "custom_manager"
+    
+    async def initialize(self):
+        # Initialize manager
+        pass
+    
+    async def shutdown(self):
+        # Cleanup manager
+        pass
+```
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+For a detailed history of changes, see [CHANGELOG.md](CHANGELOG.md).
+
+### Development Workflow
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Ensure all tests pass
+6. Submit a pull request
+
+### Code Standards
+
+- Follow PEP 8 style guidelines
+- Use type hints throughout
+- Maintain test coverage above 90%
+- Document all public APIs
+- Use conventional commit messages
 
 ## License
 
-MIT - See [LICENSE](LICENSE) for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+- **Documentation**: [https://pythonium.readthedocs.io/](https://pythonium.readthedocs.io/)
+- **Issues**: [GitHub Issues](https://github.com/dwharve/pythonium/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/dwharve/pythonium/discussions)
+
+## Acknowledgments
+
+- Model Context Protocol specification
+- The open-source Python community
+- Contributors and maintainers
+
+---
+
+**Status**: Beta - Core functionality implemented, under active development with known issues being addressed
+
+**Current Version**: 0.1.1  
+**Last Updated**: June 30, 2025  
+**Maintainer**: David Harvey

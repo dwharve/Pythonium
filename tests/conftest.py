@@ -1,0 +1,194 @@
+"""
+Base test utilities and classes for the Pythonium test suite.
+
+This module provides common test utilities, fixtures, and base classes
+used across all test modules in the Pythonium project.
+"""
+
+import asyncio
+import tempfile
+from pathlib import Path
+from typing import Any, Dict, Generator, Optional
+from unittest.mock import AsyncMock, Mock
+
+import pytest
+from pydantic import BaseModel
+
+
+class TestConfig(BaseModel):
+    """Test configuration model."""
+
+    test_data_dir: Path = Path(__file__).parent / "data"
+    temp_dir: Optional[Path] = None
+    log_level: str = "DEBUG"
+    timeout: int = 30
+
+
+class BaseTestCase:
+    """Base test case class with common utilities."""
+
+    @pytest.fixture(autouse=True)
+    def setup_test(self):
+        """Set up test environment."""
+        self.test_config = TestConfig()
+
+    def create_mock_manager(self, manager_class: type) -> Mock:
+        """Create a mock manager instance."""
+        mock_manager = Mock(spec=manager_class)
+        mock_manager.name = manager_class.__name__.lower()
+        mock_manager.initialize = AsyncMock()
+        mock_manager.shutdown = AsyncMock()
+        mock_manager.health_check = AsyncMock(return_value=True)
+        return mock_manager
+
+    def create_mock_tool(self, tool_class: type) -> Mock:
+        """Create a mock tool instance."""
+        mock_tool = Mock(spec=tool_class)
+        mock_tool.name = tool_class.__name__.lower()
+        mock_tool.description = f"Mock {tool_class.__name__}"
+        mock_tool.execute = AsyncMock()
+        return mock_tool
+
+
+class AsyncTestCase(BaseTestCase):
+    """Base test case for async functionality."""
+
+    @pytest.fixture(autouse=True)
+    def setup_async_test(self):
+        """Set up async test environment."""
+        super().setup_test()
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+
+    def teardown_method(self):
+        """Clean up after async tests."""
+        if hasattr(self, "loop") and self.loop:
+            self.loop.close()
+
+
+@pytest.fixture
+def temp_dir() -> Generator[Path, None, None]:
+    """Create a temporary directory for testing."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        yield Path(temp_dir)
+
+
+@pytest.fixture
+def test_config() -> TestConfig:
+    """Provide test configuration."""
+    return TestConfig()
+
+
+@pytest.fixture
+def mock_logger():
+    """Provide a mock logger."""
+    return Mock()
+
+
+@pytest.fixture
+def sample_config() -> Dict[str, Any]:
+    """Provide sample configuration data."""
+    return {
+        "server": {"host": "localhost", "port": 8080, "transport": "stdio"},
+        "plugins": {"auto_discover": True, "plugin_dirs": ["plugins"]},
+        "tools": {"categories": ["filesystem", "network", "system"]},
+        "logging": {"level": "INFO", "format": "structured"},
+    }
+
+
+@pytest.fixture
+async def event_loop():
+    """Create an instance of the default event loop for the test session."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
+
+class TestDataProvider:
+    """Provides test data for various test scenarios."""
+
+    @staticmethod
+    def get_valid_plugin_config() -> Dict[str, Any]:
+        """Get valid plugin configuration."""
+        return {
+            "name": "test_plugin",
+            "version": "1.0.0",
+            "description": "Test plugin",
+            "author": "Test Author",
+            "dependencies": [],
+            "config": {},
+        }
+
+    @staticmethod
+    def get_valid_tool_config() -> Dict[str, Any]:
+        """Get valid tool configuration."""
+        return {
+            "name": "test_tool",
+            "description": "Test tool",
+            "category": "testing",
+            "parameters": {},
+            "returns": "object",
+        }
+
+    @staticmethod
+    def get_invalid_config() -> Dict[str, Any]:
+        """Get invalid configuration for testing error handling."""
+        return {
+            "server": {
+                "port": "invalid_port",  # Should be integer
+                "transport": "invalid_transport",  # Should be valid choice
+            }
+        }
+
+
+def assert_valid_response(response: Dict[str, Any], expected_keys: list):
+    """Assert that a response has the expected structure."""
+    assert isinstance(response, dict)
+    for key in expected_keys:
+        assert key in response
+    assert "error" not in response or response["error"] is None
+
+
+def assert_error_response(response: Dict[str, Any], expected_error_type: str = None):
+    """Assert that a response contains an error."""
+    assert isinstance(response, dict)
+    assert "error" in response
+    assert response["error"] is not None
+    if expected_error_type:
+        assert expected_error_type in str(response["error"]).lower()
+
+
+async def wait_for_condition(
+    condition_func, timeout: float = 5.0, interval: float = 0.1
+):
+    """Wait for a condition to become true."""
+    start_time = asyncio.get_event_loop().time()
+    while True:
+        if (
+            await condition_func()
+            if asyncio.iscoroutinefunction(condition_func)
+            else condition_func()
+        ):
+            return True
+
+        if asyncio.get_event_loop().time() - start_time > timeout:
+            raise TimeoutError(f"Condition not met within {timeout} seconds")
+
+        await asyncio.sleep(interval)
+
+
+class MockAsyncContext:
+    """Mock async context manager for testing."""
+
+    def __init__(self, return_value=None):
+        self.return_value = return_value
+        self.entered = False
+        self.exited = False
+
+    async def __aenter__(self):
+        self.entered = True
+        return self.return_value
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.exited = True
+        return False
