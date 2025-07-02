@@ -6,7 +6,7 @@ across all other packages in the Pythonium project. It provides the foundation
 for the plugin framework and common services.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 # Core imports
 from pythonium.common.base import (

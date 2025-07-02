@@ -49,11 +49,19 @@ from .network import (
     WebSearchTool,
 )
 
+# Import standard tools
+from .std import (
+    DescribeToolTool,
+)
+from .std import ExecuteCommandTool as StdExecuteCommandTool
+from .std import (
+    SearchToolsTool,
+)
+
 # Import system tools
 from .system import (
     CommandHistoryTool,
     DiskUsageTool,
-    ExecuteCommandTool,
     NetworkInfoTool,
     PortMonitorTool,
     ProcessManagerTool,
@@ -64,7 +72,7 @@ from .system import (
     WhichCommandTool,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 __all__ = [
     # Base classes
@@ -84,6 +92,10 @@ __all__ = [
     "CreateFileTool",
     "SearchFilesTool",
     "FindFilesTool",
+    # Standard tools
+    "DescribeToolTool",
+    "SearchToolsTool",
+    "StdExecuteCommandTool",
     # Network tools
     "HttpClientTool",
     "RestApiTool",
@@ -97,7 +109,6 @@ __all__ = [
     "SystemInfoTool",
     "DiskUsageTool",
     "NetworkInfoTool",
-    "ExecuteCommandTool",
     "WhichCommandTool",
     "CommandHistoryTool",
     "ShellEnvironmentTool",

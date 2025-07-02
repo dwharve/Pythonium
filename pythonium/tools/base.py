@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -272,6 +272,7 @@ class ToolContext:
     environment: Dict[str, str] = field(default_factory=dict)
     permissions: Dict[str, bool] = field(default_factory=dict)
     logger: Optional[logging.Logger] = None
+    progress_callback: Optional[Callable[[str], None]] = None
 
     def has_permission(self, permission: str) -> bool:
         """Check if context has a specific permission."""

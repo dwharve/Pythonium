@@ -606,7 +606,7 @@ class WeatherTool(BaseTool):
 ```yaml
 # config.yaml
 name: "Pythonium MCP Server"
-version: "0.1.0"
+version: "0.1.1"
 
 transport:
   type: "stdio"

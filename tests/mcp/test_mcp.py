@@ -54,7 +54,7 @@ class TestMCPPackage(BaseTestCase):
         """Test that the package has a version."""
         from pythonium.mcp import __version__
 
-        assert __version__ == "0.1.0"
+        assert __version__ == "0.1.2"
 
 
 class TestMCPProtocol(BaseTestCase):

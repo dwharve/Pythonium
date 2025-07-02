@@ -8,7 +8,7 @@ messages including initialization, tool calls, resource access, etc.
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 from pythonium.managers.security_manager import SecurityManager
 from pythonium.managers.tools import (
@@ -64,7 +64,9 @@ class MCPMessageHandler:
         # Tool management
         self.tool_registry = tool_registry or ToolRegistry()
         self.dependency_manager = DependencyManager()
-        self.execution_pipeline = ExecutionPipeline(self.dependency_manager)
+        self.execution_pipeline = ExecutionPipeline(
+            self.tool_registry, self.dependency_manager
+        )
         self.result_cache = ResultCache()
         self.performance_monitor = PerformanceMonitor()
 
@@ -98,12 +100,21 @@ class MCPMessageHandler:
             MessageType.LIST_TOOLS.value: self._handle_list_tools,
             MessageType.CALL_TOOL.value: self._handle_call_tool,
             MessageType.LIST_RESOURCES.value: self._handle_list_resources,
+            MessageType.LIST_RESOURCE_TEMPLATES.value: self._handle_list_resource_templates,
             MessageType.READ_RESOURCE.value: self._handle_read_resource,
+            MessageType.SUBSCRIBE.value: self._handle_subscribe,
+            MessageType.UNSUBSCRIBE.value: self._handle_unsubscribe,
             MessageType.LIST_PROMPTS.value: self._handle_list_prompts,
             MessageType.GET_PROMPT.value: self._handle_get_prompt,
             MessageType.COMPLETE.value: self._handle_completion,
-            "tools/describe": self._handle_describe_tool,  # Custom handler for detailed tool info
+            MessageType.SET_LOGGING_LEVEL.value: self._handle_set_logging_level,
         }
+
+        # Client communication interface for server-initiated requests
+        self._client_interface: Optional[Callable] = None
+
+        # Transport reference for sending notifications
+        self._transport: Optional[Any] = None
 
         # Resource handlers
         self._resource_handlers: Dict[str, Callable] = {}
@@ -114,6 +125,37 @@ class MCPMessageHandler:
         # Background tasks
         self._notification_task: Optional[asyncio.Task] = None
         self._running = False
+
+    def set_transport(self, transport: Any) -> None:
+        """Set the transport for sending notifications."""
+        self._transport = transport
+
+    def set_client_interface(self, client_interface: Callable) -> None:
+        """Set the client interface for server-initiated requests."""
+        self._client_interface = client_interface
+
+    async def request_from_client(
+        self, method: str, params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Send a request to the client and wait for response."""
+        if not self._client_interface:
+            raise RuntimeError("Client interface not set")
+
+        result = await self._client_interface(method, params)
+        return cast(Dict[str, Any], result)
+
+    async def send_notification_to_client(
+        self, method: str, params: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Send a notification to the client."""
+        if not self._client_interface:
+            return  # Silently ignore if no client interface
+
+        # Notifications don't expect responses
+        try:
+            await self._client_interface(method, params, is_notification=True)
+        except Exception as e:
+            logger.warning(f"Failed to send notification {method}: {e}")
 
     async def start(self) -> None:
         """Start the message handler."""
@@ -327,12 +369,12 @@ class MCPMessageHandler:
         return tools
 
     def _create_tool_schema(self, tool_registration, brief: bool) -> Dict[str, Any]:
-        """Create JSON schema for a tool."""
+        """Create JSON schema for a tool that complies with MCP schema."""
         properties, required = self._build_parameter_schema(
             tool_registration.metadata.parameters
         )
 
-        return {
+        schema = {
             "name": tool_registration.tool_id,
             "description": tool_registration.metadata.get_description(brief=brief),
             "inputSchema": {
@@ -341,6 +383,59 @@ class MCPMessageHandler:
                 "required": required,
             },
         }
+
+        # Use annotations for additional tool information (per MCP schema)
+        annotations = {}
+
+        # Add title if available
+        if (
+            hasattr(tool_registration.metadata, "title")
+            and tool_registration.metadata.title
+        ):
+            annotations["title"] = tool_registration.metadata.title
+
+        # Add hints based on tool characteristics
+        if hasattr(tool_registration.metadata, "category"):
+            # Store category in _meta since it's not part of standard annotations
+            if "_meta" not in schema:
+                schema["_meta"] = {}
+            schema["_meta"]["category"] = tool_registration.metadata.category
+
+        if hasattr(tool_registration.metadata, "tags"):
+            # Store tags in _meta since it's not part of standard annotations
+            if "_meta" not in schema:
+                schema["_meta"] = {}
+            schema["_meta"]["tags"] = tool_registration.metadata.tags
+
+        # Add standard tool hints based on tool characteristics
+        if (
+            hasattr(tool_registration.metadata, "read_only")
+            and tool_registration.metadata.read_only
+        ):
+            annotations["readOnlyHint"] = True
+
+        if (
+            hasattr(tool_registration.metadata, "destructive")
+            and tool_registration.metadata.destructive
+        ):
+            annotations["destructiveHint"] = True
+
+        if (
+            hasattr(tool_registration.metadata, "idempotent")
+            and tool_registration.metadata.idempotent
+        ):
+            annotations["idempotentHint"] = True
+
+        if (
+            hasattr(tool_registration.metadata, "open_world")
+            and tool_registration.metadata.open_world is not None
+        ):
+            annotations["openWorldHint"] = tool_registration.metadata.open_world
+
+        if annotations:
+            schema["annotations"] = annotations
+
+        return schema
 
     def _build_parameter_schema(self, parameters) -> Tuple[Dict[str, Any], List[str]]:
         """Build parameter schema from tool parameters."""
@@ -377,62 +472,6 @@ class MCPMessageHandler:
             param_schema["enum"] = param.allowed_values
         if param.default is not None:
             param_schema["default"] = param.default
-
-    async def _handle_describe_tool(
-        self, session_id: str, request: MCPRequest
-    ) -> Dict[str, Any]:
-        """Handle describe tool request for detailed tool information."""
-        config = self.config_manager.get_config()
-        if not config.tools.enable_tool_execution:
-            raise InvalidRequest("Tool execution is disabled")
-
-        tool_name = self._validate_tool_name(request)
-        tool_registration = self._find_tool_registration(tool_name)
-        return self._build_detailed_tool_response(tool_registration)
-
-    def _validate_tool_name(self, request: MCPRequest) -> str:
-        """Validate and extract tool name from request."""
-        if not request.params or not request.params.get("name"):
-            raise InvalidParams("Tool name required")
-        return str(request.params["name"])
-
-    def _find_tool_registration(self, tool_name: str):
-        """Find tool registration by name."""
-        try:
-            tool_registrations = self.tool_registry.list_tools()
-            for reg in tool_registrations:
-                if reg.tool_id == tool_name:
-                    return reg
-            raise InvalidParams(f"Tool '{tool_name}' not found")
-        except Exception as e:
-            logger.exception(f"Error describing tool {tool_name}")
-            raise InternalError(f"Failed to describe tool: {e}")
-
-    def _build_detailed_tool_response(self, tool_registration) -> Dict[str, Any]:
-        """Build detailed tool response with full descriptions."""
-        properties, required = self._build_parameter_schema(
-            tool_registration.metadata.parameters
-        )
-
-        return {
-            "tool": {
-                "name": tool_registration.tool_id,
-                "description": tool_registration.metadata.get_detailed_description(),
-                "brief_description": tool_registration.metadata.get_brief_description(),
-                "category": tool_registration.metadata.category,
-                "tags": tool_registration.metadata.tags,
-                "version": tool_registration.metadata.version,
-                "author": tool_registration.metadata.author,
-                "dangerous": tool_registration.metadata.dangerous,
-                "requires_auth": tool_registration.metadata.requires_auth,
-                "max_execution_time": tool_registration.metadata.max_execution_time,
-                "inputSchema": {
-                    "type": "object",
-                    "properties": properties,
-                    "required": required,
-                },
-            }
-        }
 
     def _convert_parameter_type(self, param_type) -> str:
         """Convert ParameterType to JSON schema type."""
@@ -473,53 +512,73 @@ class MCPMessageHandler:
             raise InvalidParams(f"Tool '{params.name}' not found")
 
         try:
-            # Execute tool through pipeline
-            result = await self.execution_pipeline.execute_single(
-                tool_id=params.name,
-                args=params.arguments or {},
-                timeout=config.tools.tool_timeout_seconds,
-                metadata={"session_id": session_id},
-            )
+            # Execute tool with progress reporting
+            result = await self._execute_tool_with_progress(params, session_id, config)
 
             # Convert result to MCP format
-            if result.success:
-                # Extract content from ToolResult properly
-                tool_result_obj = result.result
-
-                if hasattr(tool_result_obj, "data") and tool_result_obj.data:
-                    # For command execution, extract stdout from data
-                    if (
-                        isinstance(tool_result_obj.data, dict)
-                        and "stdout" in tool_result_obj.data
-                    ):
-                        content_text = tool_result_obj.data["stdout"]
-                    else:
-                        content_text = str(tool_result_obj.data)
-                elif hasattr(tool_result_obj, "success") and tool_result_obj.success:
-                    # Fallback: try to get meaningful content
-                    content_text = "Tool executed successfully"
-                else:
-                    content_text = str(tool_result_obj)
-
-                content = [{"type": "text", "text": content_text}]
-                tool_result = self.protocol.create_tool_result(content, is_error=False)
-            else:
-                error_content = [
-                    {
-                        "type": "text",
-                        "text": f"Tool execution failed: {result.error}",
-                    }
-                ]
-                tool_result = self.protocol.create_tool_result(
-                    error_content, is_error=True
-                )
-
-            return tool_result.model_dump()
+            return self._convert_tool_result_to_mcp(result)
 
         except Exception as e:
             error_content = [{"type": "text", "text": f"Tool execution error: {e}"}]
             tool_result = self.protocol.create_tool_result(error_content, is_error=True)
             return tool_result.model_dump()
+
+    async def _execute_tool_with_progress(self, params, session_id: str, config):
+        """Execute tool with progress reporting."""
+        import uuid
+
+        progress_token = str(uuid.uuid4())
+
+        # Create progress callback
+        async def progress_callback(message: str) -> None:
+            # Extract progress info from message if possible, otherwise use default
+            progress = 50  # Default progress value
+            total = 100
+            await self._send_progress_notification(progress_token, progress, total)
+
+        # Execute tool through pipeline with progress reporting
+        return await self.execution_pipeline.execute_single(
+            tool_id=params.name,
+            args=params.arguments or {},
+            timeout=config.tools.tool_timeout_seconds,
+            metadata={"session_id": session_id},
+            progress_callback=progress_callback,
+            progress_token=progress_token,
+        )
+
+    def _convert_tool_result_to_mcp(self, result) -> Dict[str, Any]:
+        """Convert execution result to MCP format."""
+        if result.success:
+            content_text = self._extract_content_from_result(result.result)
+            content = [{"type": "text", "text": content_text}]
+            tool_result = self.protocol.create_tool_result(content, is_error=False)
+        else:
+            error_content = [
+                {
+                    "type": "text",
+                    "text": f"Tool execution failed: {result.error}",
+                }
+            ]
+            tool_result = self.protocol.create_tool_result(error_content, is_error=True)
+
+        return tool_result.model_dump()
+
+    def _extract_content_from_result(self, tool_result_obj):
+        """Extract content text from tool result object."""
+        if hasattr(tool_result_obj, "data") and tool_result_obj.data:
+            # For command execution, extract stdout from data
+            if (
+                isinstance(tool_result_obj.data, dict)
+                and "stdout" in tool_result_obj.data
+            ):
+                return tool_result_obj.data["stdout"]
+            else:
+                return str(tool_result_obj.data)
+        elif hasattr(tool_result_obj, "success") and tool_result_obj.success:
+            # Fallback: try to get meaningful content
+            return "Tool executed successfully"
+        else:
+            return str(tool_result_obj)
 
     async def _handle_list_resources(
         self, session_id: str, request: MCPRequest
@@ -527,6 +586,18 @@ class MCPMessageHandler:
         """Handle list resources request."""
         # For now, return empty list - this would be extended to support actual resources
         return {"resources": []}
+
+    async def _handle_list_resource_templates(
+        self, session_id: str, request: MCPRequest
+    ) -> Dict[str, Any]:
+        """Handle list resource templates request."""
+        config = self.config_manager.get_config()
+        if not config.resources:
+            return {"resourceTemplates": []}
+
+        # For now, return empty list as no resource templates are implemented
+        # This can be extended when resource templates are added
+        return {"resourceTemplates": []}
 
     async def _handle_read_resource(
         self, session_id: str, request: MCPRequest
@@ -547,6 +618,41 @@ class MCPMessageHandler:
             return {"contents": [contents]}
         except Exception as e:
             raise InternalError(f"Failed to read resource: {e}")
+
+    async def _handle_subscribe(
+        self, session_id: str, request: MCPRequest
+    ) -> Dict[str, Any]:
+        """Handle subscribe request for resource updates."""
+        if not request.params or "uri" not in request.params:
+            raise InvalidParams("URI required for subscription")
+
+        uri = request.params["uri"]
+
+        # Check if the resource exists
+        handler = self._resource_handlers.get(uri)
+        if not handler:
+            raise InvalidParams(f"Resource '{uri}' not found")
+
+        # Store subscription for this session
+        await self.session_manager.add_subscription(session_id, uri)
+
+        logger.info(f"Session {session_id} subscribed to resource: {uri}")
+        return {}
+
+    async def _handle_unsubscribe(
+        self, session_id: str, request: MCPRequest
+    ) -> Dict[str, Any]:
+        """Handle unsubscribe request for resource updates."""
+        if not request.params or "uri" not in request.params:
+            raise InvalidParams("URI required for unsubscription")
+
+        uri = request.params["uri"]
+
+        # Remove subscription for this session
+        await self.session_manager.remove_subscription(session_id, uri)
+
+        logger.info(f"Session {session_id} unsubscribed from resource: {uri}")
+        return {}
 
     async def _handle_list_prompts(
         self, session_id: str, request: MCPRequest
@@ -652,6 +758,29 @@ class MCPMessageHandler:
         # This would be implemented to return actual prompt metadata
         return None
 
+    async def _send_progress_notification(
+        self, progress_token: str, progress: int, total: int = 100
+    ) -> None:
+        """Send progress notification to client."""
+        if self._transport is None:
+            logger.warning("Cannot send progress notification: no transport set")
+            return
+
+        try:
+            notification = self.protocol.create_progress_notification(
+                progress_token=progress_token, progress=progress, total=total
+            )
+
+            # Send the notification via transport
+            await self._transport.send(notification.model_dump(exclude_unset=True))
+
+            logger.debug(
+                f"Sent progress notification: {progress}/{total} for token {progress_token}"
+            )
+
+        except Exception as e:
+            logger.warning(f"Failed to send progress notification: {e}")
+
     async def _notification_loop(self) -> None:
         """Background loop for sending notifications."""
         while self._running:
@@ -716,3 +845,113 @@ class MCPMessageHandler:
             MessageType.LOG_MESSAGE.value,
             {"level": level.value, "data": message, "logger": logger_name},
         )
+
+    async def _handle_set_logging_level(
+        self, session_id: str, request: MCPRequest
+    ) -> Dict[str, Any]:
+        """Handle set logging level request."""
+        if not request.params or "level" not in request.params:
+            raise InvalidParams("Logging level required")
+
+        level = request.params["level"]
+        valid_levels = [
+            "debug",
+            "info",
+            "notice",
+            "warning",
+            "error",
+            "critical",
+            "alert",
+            "emergency",
+        ]
+
+        if level not in valid_levels:
+            raise InvalidParams(
+                f"Invalid logging level '{level}'. Must be one of: {valid_levels}"
+            )
+
+        # Set logging level for this session
+        await self.session_manager.set_session_context(
+            session_id, "logging_level", level
+        )
+
+        # Convert to Python logging level and set it
+        python_level_map = {
+            "debug": logging.DEBUG,
+            "info": logging.INFO,
+            "notice": logging.INFO,  # Python doesn't have NOTICE, use INFO
+            "warning": logging.WARNING,
+            "error": logging.ERROR,
+            "critical": logging.CRITICAL,
+            "alert": logging.CRITICAL,  # Python doesn't have ALERT, use CRITICAL
+            "emergency": logging.CRITICAL,  # Python doesn't have EMERGENCY, use CRITICAL
+        }
+
+        # Update logging level for the logger
+        logger.setLevel(python_level_map[level])
+
+        logger.info(f"Session {session_id} set logging level to {level}")
+        return {}
+
+    async def create_message_request(
+        self,
+        messages: List[Dict[str, Any]],
+        max_tokens: Optional[int] = None,
+        model_preferences: Optional[Dict[str, Any]] = None,
+        system_prompt: Optional[str] = None,
+        include_context: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Request the client to sample from an LLM."""
+        params: Dict[str, Any] = {"messages": messages}
+
+        if max_tokens is not None:
+            params["maxTokens"] = max_tokens
+        if model_preferences:
+            params["modelPreferences"] = model_preferences
+        if system_prompt:
+            params["systemPrompt"] = system_prompt
+        if include_context:
+            params["includeContext"] = include_context
+
+        return await self.request_from_client(MessageType.CREATE_MESSAGE.value, params)
+
+    async def list_roots_request(self) -> Dict[str, Any]:
+        """Request the client to list root URIs."""
+        return await self.request_from_client(MessageType.LIST_ROOTS.value)
+
+    async def elicit_request(
+        self,
+        requested_schema: Dict[str, Any],
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Request the client to elicit information from the user."""
+        params: Dict[str, Any] = {"requestedSchema": requested_schema}
+
+        if title:
+            params["title"] = title
+        if description:
+            params["description"] = description
+
+        return await self.request_from_client(MessageType.ELICIT.value, params)
+
+    async def notify_resource_updated(self, uri: str) -> None:
+        """Notify subscribers that a resource has been updated."""
+        subscribers = await self.session_manager.get_subscribers(uri)
+        if subscribers:
+            params = {"uri": uri}
+            await self.send_notification_to_client(
+                MessageType.RESOURCE_UPDATED.value, params
+            )
+
+    async def notify_resource_list_changed(self) -> None:
+        """Notify that the resource list has changed."""
+        await self.send_notification_to_client(MessageType.RESOURCE_LIST_CHANGED.value)
+
+    async def notify_tool_list_changed(self) -> None:
+        """Notify that the tool list has changed."""
+        await self.send_notification_to_client(MessageType.TOOL_LIST_CHANGED.value)
+
+    async def notify_prompt_list_changed(self) -> None:
+        """Notify that the prompt list has changed."""
+        await self.send_notification_to_client(MessageType.PROMPT_LIST_CHANGED.value)

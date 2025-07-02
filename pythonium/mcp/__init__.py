@@ -6,7 +6,7 @@ plugin framework. It includes comprehensive configuration management,
 protocol implementation, and client integration capabilities.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 # Import core MCP components
 from . import config, handlers, protocol, server, session, transport

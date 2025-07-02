@@ -13,6 +13,427 @@ from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel
 
 
+# Base types and utilities
+class Role(str, Enum):
+    """The sender or recipient of messages and data in a conversation."""
+
+    ASSISTANT = "assistant"
+    USER = "user"
+
+
+class BaseMetadata(BaseModel):
+    """Base interface for metadata with name (identifier) and title (display name) properties."""
+
+    name: str
+    title: Optional[str] = None
+
+
+class RequestId(BaseModel):
+    """Request identifier type."""
+
+    id: Union[str, int]
+
+
+class ProgressToken(BaseModel):
+    """Progress token for tracking progress of operations."""
+
+    token: Union[str, int]
+
+
+class Cursor(BaseModel):
+    """Cursor for pagination."""
+
+    cursor: str
+
+
+class EmptyResult(BaseModel):
+    """Empty result for operations that don't return data."""
+
+    pass
+
+
+# Content Block Types (Union type for all content)
+# Will be defined later after the content classes are defined
+ContentBlock = None
+
+
+# JSON-RPC base types
+class JSONRPCMessage(BaseModel):
+    """Base JSON-RPC message."""
+
+    jsonrpc: Literal["2.0"] = "2.0"
+
+
+class JSONRPCRequest(JSONRPCMessage):
+    """JSON-RPC request message."""
+
+    id: Union[str, int]
+    method: str
+    params: Optional[Dict[str, Any]] = None
+
+
+class JSONRPCResponse(JSONRPCMessage):
+    """JSON-RPC response message."""
+
+    id: Union[str, int]
+    result: Optional[Any] = None
+    error: Optional["JSONRPCError"] = None
+
+
+class JSONRPCError(BaseModel):
+    """JSON-RPC error object."""
+
+    code: int
+    message: str
+    data: Optional[Any] = None
+
+
+class JSONRPCNotification(JSONRPCMessage):
+    """JSON-RPC notification message."""
+
+    method: str
+    params: Optional[Dict[str, Any]] = None
+
+
+# Notification types
+class Notification(BaseModel):
+    """Base notification type."""
+
+    method: str
+    params: Optional[Dict[str, Any]] = None
+
+
+class CancelledNotification(Notification):
+    """Notification sent when a request is cancelled."""
+
+    method: Literal["notifications/cancelled"] = "notifications/cancelled"
+    params: Dict[str, Union[str, int]]  # requestId
+
+
+class InitializedNotification(Notification):
+    """Notification sent when initialization is complete."""
+
+    method: Literal["notifications/initialized"] = "notifications/initialized"
+
+
+class ProgressNotification(Notification):
+    """Notification for progress updates."""
+
+    method: Literal["notifications/progress"] = "notifications/progress"
+    params: Optional[Dict[str, Any]] = None  # Will contain ProgressParams
+
+
+class LoggingMessageNotification(Notification):
+    """Notification for logging messages."""
+
+    method: Literal["notifications/message"] = "notifications/message"
+    params: Optional[Dict[str, Any]] = None  # Will contain LoggingParams
+
+
+class ResourceListChangedNotification(Notification):
+    """Notification when resource list changes."""
+
+    method: Literal["notifications/resources/list_changed"] = (
+        "notifications/resources/list_changed"
+    )
+
+
+class ResourceUpdatedNotification(Notification):
+    """Notification when a resource is updated."""
+
+    method: Literal["notifications/resources/updated"] = (
+        "notifications/resources/updated"
+    )
+    params: Dict[str, str]  # uri
+
+
+class PromptListChangedNotification(Notification):
+    """Notification when prompt list changes."""
+
+    method: Literal["notifications/prompts/list_changed"] = (
+        "notifications/prompts/list_changed"
+    )
+
+
+class ToolListChangedNotification(Notification):
+    """Notification when tool list changes."""
+
+    method: Literal["notifications/tools/list_changed"] = (
+        "notifications/tools/list_changed"
+    )
+
+
+class RootsListChangedNotification(Notification):
+    """Notification when roots list changes."""
+
+    method: Literal["notifications/roots/list_changed"] = (
+        "notifications/roots/list_changed"
+    )
+
+
+# Request/Response types
+class Request(BaseModel):
+    """Base request type."""
+
+    method: str
+    params: Optional[Dict[str, Any]] = None
+
+
+class Result(BaseModel):
+    """Base result type."""
+
+    pass
+
+
+class ClientRequest(Request):
+    """Base type for client-initiated requests."""
+
+    pass
+
+
+class ServerRequest(Request):
+    """Base type for server-initiated requests."""
+
+    pass
+
+
+class ClientResult(Result):
+    """Base type for results from client requests."""
+
+    pass
+
+
+class ServerResult(Result):
+    """Base type for results from server requests."""
+
+    pass
+
+
+class ClientNotification(Notification):
+    """Base type for client notifications."""
+
+    pass
+
+
+class ServerNotification(Notification):
+    """Base type for server notifications."""
+
+    pass
+
+
+# Schema definition types
+class PrimitiveSchemaDefinition(BaseModel):
+    """Base class for primitive schema definitions."""
+
+    type: str
+    description: Optional[str] = None
+
+
+class StringSchema(PrimitiveSchemaDefinition):
+    """String schema definition."""
+
+    type: Literal["string"] = "string"
+    enum: Optional[List[str]] = None
+    const: Optional[str] = None
+
+
+class NumberSchema(PrimitiveSchemaDefinition):
+    """Number schema definition."""
+
+    type: Literal["number"] = "number"
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
+
+
+class BooleanSchema(PrimitiveSchemaDefinition):
+    """Boolean schema definition."""
+
+    type: Literal["boolean"] = "boolean"
+
+
+class EnumSchema(BaseModel):
+    """Enum schema definition."""
+
+    enum: List[Union[str, int, float]]
+    description: Optional[str] = None
+
+
+# Additional missing types
+class Implementation(BaseModel):
+    """Implementation details."""
+
+    name: str
+    version: str
+
+
+class LoggingLevel(str, Enum):
+    """Logging levels."""
+
+    DEBUG = "debug"
+    INFO = "info"
+    NOTICE = "notice"
+    WARNING = "warning"
+    ERROR = "error"
+    CRITICAL = "critical"
+    ALERT = "alert"
+    EMERGENCY = "emergency"
+
+
+class ModelHint(BaseModel):
+    """Hint about which model to use."""
+
+    name: Optional[str] = None
+
+
+class ModelPreferences(BaseModel):
+    """Model preferences for sampling."""
+
+    hints: Optional[List[ModelHint]] = None
+    costPriority: Optional[float] = None
+    speedPriority: Optional[float] = None
+    intelligencePriority: Optional[float] = None
+
+
+class SamplingMessage(BaseModel):
+    """Message for sampling operations."""
+
+    role: Role
+    content: Any  # ContentBlock (defined later)
+
+
+class Root(BaseModel):
+    """Represents a root directory or file that the server can operate on."""
+
+    uri: str
+    name: Optional[str] = None
+
+
+class ResourceTemplate(BaseModel):
+    """Template for creating resources."""
+
+    uriTemplate: str
+    name: str
+    description: Optional[str] = None
+    mimeType: Optional[str] = None
+
+
+class ResourceTemplateReference(BaseModel):
+    """Reference to a resource template."""
+
+    type: Literal["ref/template"] = "ref/template"
+    uriTemplate: str
+
+
+class PromptReference(BaseModel):
+    """Reference to a prompt."""
+
+    type: Literal["ref/prompt"] = "ref/prompt"
+    name: str
+
+
+class ToolAnnotations(BaseModel):
+    """Annotations specific to tools."""
+
+    title: Optional[str] = None
+
+
+# Pagination types
+class PaginatedRequest(BaseModel):
+    """Base for paginated requests."""
+
+    cursor: Optional[str] = None
+
+
+class PaginatedResult(BaseModel):
+    """Base for paginated results."""
+
+    nextCursor: Optional[str] = None
+
+
+# Specific request types
+class CreateMessageRequest(ServerRequest):
+    """Request to create a message via LLM sampling."""
+
+    method: Literal["sampling/createMessage"] = "sampling/createMessage"
+    params: Dict[str, Any]  # Contains messages, modelPreferences, etc.
+
+
+class CreateMessageResult(ServerResult):
+    """Result from message creation."""
+
+    content: Any  # ContentBlock (defined later)
+    model: str
+    stopReason: Optional[str] = None
+
+
+class ElicitRequest(ServerRequest):
+    """Request to elicit information from the user."""
+
+    method: Literal["elicitation/create"] = "elicitation/create"
+    params: Dict[str, Any]
+
+
+class ElicitResult(ServerResult):
+    """Result from elicitation."""
+
+    content: Any  # ContentBlock (defined later)
+
+
+class ListRootsRequest(ServerRequest):
+    """Request to list available roots."""
+
+    method: Literal["roots/list"] = "roots/list"
+
+
+class ListRootsResult(ServerResult):
+    """Result from listing roots."""
+
+    roots: List[Root]
+
+
+class ListResourceTemplatesResult(ClientResult):
+    """Result from listing resource templates."""
+
+    resourceTemplates: List[ResourceTemplate]
+
+
+class ListPromptsResult(ClientResult):
+    """Result from listing prompts."""
+
+    prompts: List["Prompt"]
+
+
+class ListResourcesResult(ClientResult):
+    """Result from listing resources."""
+
+    resources: List["Resource"]
+
+
+class ListToolsResult(ClientResult):
+    """Result from listing tools."""
+
+    tools: List["Tool"]
+
+
+class ReadResourceResult(ClientResult):
+    """Result from reading a resource."""
+
+    contents: List["ResourceContents"]
+
+
+class CallToolResult(ClientResult):
+    """Result from calling a tool."""
+
+    content: List[Any]  # List[ContentBlock] (defined later)
+    isError: Optional[bool] = None
+
+
+class CompleteResult(ClientResult):
+    """Result from completion."""
+
+    completion: Dict[str, Any]
+
+
 class MCPVersion(str, Enum):
     """Supported MCP protocol versions."""
 
@@ -26,6 +447,7 @@ class MessageType(str, Enum):
     INITIALIZE = "initialize"
     PING = "ping"
     LIST_RESOURCES = "resources/list"
+    LIST_RESOURCE_TEMPLATES = "resources/templates/list"
     READ_RESOURCE = "resources/read"
     SUBSCRIBE = "resources/subscribe"
     UNSUBSCRIBE = "resources/unsubscribe"
@@ -34,8 +456,14 @@ class MessageType(str, Enum):
     LIST_TOOLS = "tools/list"
     CALL_TOOL = "tools/call"
     COMPLETE = "completion/complete"
+    SET_LOGGING_LEVEL = "logging/setLevel"
 
-    # Server to client
+    # Server to client requests
+    CREATE_MESSAGE = "sampling/createMessage"
+    LIST_ROOTS = "roots/list"
+    ELICIT = "elicitation/create"
+
+    # Server to client notifications
     INITIALIZED = "notifications/initialized"
     PROGRESS = "notifications/progress"
     RESOURCE_UPDATED = "notifications/resources/updated"
@@ -43,6 +471,7 @@ class MessageType(str, Enum):
     PROMPT_LIST_CHANGED = "notifications/prompts/list_changed"
     TOOL_LIST_CHANGED = "notifications/tools/list_changed"
     LOG_MESSAGE = "notifications/message"
+    ROOTS_LIST_CHANGED = "notifications/roots/list_changed"
 
     # Bidirectional
     CANCEL_REQUEST = "notifications/cancelled"
@@ -103,6 +532,84 @@ class MCPNotification(MCPMessage):
 
     method: str
     params: Optional[Dict[str, Any]] = None
+
+
+# Content types for MCP protocol
+class Annotations(BaseModel):
+    """Optional annotations for the client."""
+
+    audience: Optional[List[str]] = None
+    lastModified: Optional[str] = None
+    priority: Optional[float] = None
+
+
+class TextContent(BaseModel):
+    """Text content block."""
+
+    type: Literal["text"] = "text"
+    text: str
+    annotations: Optional[Annotations] = None
+
+
+class ImageContent(BaseModel):
+    """Image content block."""
+
+    type: Literal["image"] = "image"
+    data: str  # base64-encoded image data
+    mimeType: str
+    annotations: Optional[Annotations] = None
+
+
+class AudioContent(BaseModel):
+    """Audio content block."""
+
+    type: Literal["audio"] = "audio"
+    data: str  # base64-encoded audio data
+    mimeType: str
+    annotations: Optional[Annotations] = None
+
+
+class ResourceLink(BaseModel):
+    """Resource link content block."""
+
+    type: Literal["resource"] = "resource"
+    uri: str
+    name: str
+    description: Optional[str] = None
+    mimeType: Optional[str] = None
+    size: Optional[int] = None
+    title: Optional[str] = None
+    annotations: Optional[Annotations] = None
+
+
+class EmbeddedResource(BaseModel):
+    """Embedded resource content block."""
+
+    type: Literal["resource"] = "resource"
+    resource: Union["TextResourceContents", "BlobResourceContents"]
+    annotations: Optional[Annotations] = None
+
+
+class TextResourceContents(BaseModel):
+    """Text resource contents."""
+
+    uri: str
+    text: str
+    mimeType: Optional[str] = None
+
+
+class BlobResourceContents(BaseModel):
+    """Binary resource contents."""
+
+    uri: str
+    blob: str  # base64-encoded binary data
+    mimeType: Optional[str] = None
+
+
+# Union type for all content blocks (defined once at module level)
+ContentBlock = Union[
+    TextContent, ImageContent, AudioContent, ResourceLink, EmbeddedResource
+]
 
 
 # Specific message types

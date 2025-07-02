@@ -15,6 +15,229 @@ import pytest
 from pydantic import BaseModel
 
 
+# MCP-specific test fixtures and utilities
+@pytest.fixture
+def mock_mcp_config():
+    """Create a mock MCP configuration."""
+    from pythonium.mcp.config import MCPConfigManager
+
+    config = Mock(spec=MCPConfigManager)
+    config.server_config = Mock()
+    config.server_config.name = "test-server"
+    config.server_config.version = "1.0.0"
+    config.server_config.description = "Test MCP server"
+
+    config.transport_config = Mock()
+    config.transport_config.type = "stdio"
+    config.transport_config.timeout = 30
+
+    config.security_config = Mock()
+    config.security_config.enabled = True
+    config.security_config.max_request_size = 1024000
+
+    config.logging_config = Mock()
+    config.logging_config.level = "INFO"
+
+    config.performance_config = Mock()
+    config.performance_config.enabled = True
+    config.performance_config.max_concurrent_requests = 100
+
+    config.session_config = Mock()
+    config.session_config.timeout = 3600
+    config.session_config.max_sessions = 100
+    config.session_config.cleanup_interval = 300
+
+    return config
+
+
+@pytest.fixture
+def mock_session_manager():
+    """Create a mock session manager."""
+    from pythonium.mcp.session import SessionManager
+
+    session_mgr = Mock(spec=SessionManager)
+    session_mgr.sessions = {}
+    session_mgr.create_session = Mock(return_value="test-session-id")
+    session_mgr.get_session = Mock()
+    session_mgr.remove_session = Mock(return_value=True)
+    session_mgr.get_session_count = Mock(return_value=0)
+    session_mgr.cleanup_expired_sessions = Mock(return_value=0)
+
+    return session_mgr
+
+
+@pytest.fixture
+def mock_tool_registry():
+    """Create a mock tool registry."""
+    from pythonium.managers.tools import ToolRegistry
+
+    registry = Mock(spec=ToolRegistry)
+    registry.get_all_tools = Mock(return_value=[])
+    registry.get_tool = Mock(return_value=None)
+    registry.register_tool = Mock()
+    registry.unregister_tool = Mock()
+
+    return registry
+
+
+@pytest.fixture
+def mock_security_manager():
+    """Create a mock security manager."""
+    from pythonium.managers.security_manager import SecurityManager
+
+    security = Mock(spec=SecurityManager)
+    security.validate_request = Mock(return_value=True)
+    security.check_permissions = Mock(return_value=True)
+    security.sanitize_input = Mock(side_effect=lambda x: x)
+
+    return security
+
+
+@pytest.fixture
+def sample_mcp_request():
+    """Create a sample MCP request for testing."""
+    from pythonium.mcp.protocol import MCPRequest
+
+    return MCPRequest(
+        id="test-request-1",
+        method="ping",
+        params={},
+    )
+
+
+@pytest.fixture
+def sample_mcp_response():
+    """Create a sample MCP response for testing."""
+    from pythonium.mcp.protocol import MCPResponse
+
+    return MCPResponse(
+        id="test-request-1",
+        result={"status": "ok"},
+    )
+
+
+@pytest.fixture
+def sample_mcp_notification():
+    """Create a sample MCP notification for testing."""
+    from pythonium.mcp.protocol import MCPNotification
+
+    return MCPNotification(
+        method="notifications/initialized",
+        params={},
+    )
+
+
+@pytest.fixture
+def temporary_config_file():
+    """Create a temporary configuration file for testing."""
+    import json
+
+    config_data = {
+        "server": {
+            "name": "test-server",
+            "version": "1.0.0",
+            "description": "Test server",
+        },
+        "transport": {"type": "stdio", "timeout": 30},
+        "security": {"enabled": True, "max_request_size": 1024000},
+        "logging": {"level": "INFO"},
+    }
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump(config_data, f)
+        yield f.name
+
+    # Cleanup
+    Path(f.name).unlink(missing_ok=True)
+
+
+@pytest.fixture
+def event_loop():
+    """Create an event loop for async tests."""
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
+
+
+# Performance testing utilities
+@pytest.fixture
+def performance_monitor():
+    """Create a performance monitor for testing."""
+
+    class PerformanceMonitor:
+        def __init__(self):
+            self.metrics = {}
+            self.start_times = {}
+
+        def start_timer(self, name: str):
+            import time
+
+            self.start_times[name] = time.perf_counter()
+
+        def end_timer(self, name: str):
+            import time
+
+            if name in self.start_times:
+                duration = time.perf_counter() - self.start_times[name]
+                self.metrics[name] = duration
+                del self.start_times[name]
+                return duration
+            return None
+
+        def get_metric(self, name: str):
+            return self.metrics.get(name)
+
+        def get_memory_usage(self):
+            import psutil
+
+            process = psutil.Process()
+            return process.memory_info().rss / 1024 / 1024  # MB
+
+    return PerformanceMonitor()
+
+
+# Mark decorators for different test categories
+pytest.mark.unit = pytest.mark.unit
+pytest.mark.integration = pytest.mark.integration
+pytest.mark.performance = pytest.mark.performance
+pytest.mark.slow = pytest.mark.slow
+
+
+# Test data utilities
+class TestDataManager:
+    """Manages test data files and resources."""
+
+    def __init__(self, data_dir: Path):
+        self.data_dir = data_dir
+        self.data_dir.mkdir(exist_ok=True)
+
+    def get_test_file(self, filename: str) -> Path:
+        """Get path to test data file."""
+        return self.data_dir / filename
+
+    def create_test_file(self, filename: str, content: str) -> Path:
+        """Create a test data file."""
+        file_path = self.data_dir / filename
+        file_path.write_text(content)
+        return file_path
+
+    def cleanup(self):
+        """Clean up test data files."""
+        import shutil
+
+        if self.data_dir.exists():
+            shutil.rmtree(self.data_dir)
+
+
+@pytest.fixture
+def test_data_manager():
+    """Create a test data manager."""
+    data_dir = Path(tempfile.mkdtemp())
+    manager = TestDataManager(data_dir)
+    yield manager
+    manager.cleanup()
+
+
 class TestConfig(BaseModel):
     """Test configuration model."""
 
@@ -96,68 +319,6 @@ def sample_config() -> Dict[str, Any]:
     }
 
 
-@pytest.fixture
-async def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
-
-
-class TestDataProvider:
-    """Provides test data for various test scenarios."""
-
-    @staticmethod
-    def get_valid_plugin_config() -> Dict[str, Any]:
-        """Get valid plugin configuration."""
-        return {
-            "name": "test_plugin",
-            "version": "1.0.0",
-            "description": "Test plugin",
-            "author": "Test Author",
-            "dependencies": [],
-            "config": {},
-        }
-
-    @staticmethod
-    def get_valid_tool_config() -> Dict[str, Any]:
-        """Get valid tool configuration."""
-        return {
-            "name": "test_tool",
-            "description": "Test tool",
-            "category": "testing",
-            "parameters": {},
-            "returns": "object",
-        }
-
-    @staticmethod
-    def get_invalid_config() -> Dict[str, Any]:
-        """Get invalid configuration for testing error handling."""
-        return {
-            "server": {
-                "port": "invalid_port",  # Should be integer
-                "transport": "invalid_transport",  # Should be valid choice
-            }
-        }
-
-
-def assert_valid_response(response: Dict[str, Any], expected_keys: list):
-    """Assert that a response has the expected structure."""
-    assert isinstance(response, dict)
-    for key in expected_keys:
-        assert key in response
-    assert "error" not in response or response["error"] is None
-
-
-def assert_error_response(response: Dict[str, Any], expected_error_type: str = None):
-    """Assert that a response contains an error."""
-    assert isinstance(response, dict)
-    assert "error" in response
-    assert response["error"] is not None
-    if expected_error_type:
-        assert expected_error_type in str(response["error"]).lower()
-
-
 async def wait_for_condition(
     condition_func, timeout: float = 5.0, interval: float = 0.1
 ):
@@ -192,3 +353,20 @@ class MockAsyncContext:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         self.exited = True
         return False
+
+
+def assert_valid_response(response: Dict[str, Any], expected_keys: list):
+    """Assert that a response has the expected structure."""
+    assert isinstance(response, dict)
+    for key in expected_keys:
+        assert key in response
+    assert "error" not in response or response["error"] is None
+
+
+def assert_error_response(response: Dict[str, Any], expected_error_type: str = None):
+    """Assert that a response contains an error."""
+    assert isinstance(response, dict)
+    assert "error" in response
+    assert response["error"] is not None
+    if expected_error_type:
+        assert expected_error_type in str(response["error"]).lower()

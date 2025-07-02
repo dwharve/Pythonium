@@ -183,7 +183,7 @@ class ServerConfig(BaseModel):
     """Complete MCP server configuration."""
 
     name: str = "Pythonium MCP Server"
-    version: str = "0.1.0"
+    version: str = "0.1.2"
     description: str = "A modular MCP server for AI agents"
 
     # Core configuration sections
@@ -276,7 +276,7 @@ class MCPConfigManager:
         """Get default configuration values."""
         return {
             "name": "Pythonium MCP Server",
-            "version": "0.1.0",
+            "version": "0.1.2",
             "description": "A modular MCP server for AI agents",
             "transport": {"type": "stdio"},
             "security": {},

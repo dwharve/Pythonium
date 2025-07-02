@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional, cast
 
 import click
 from rich.console import Console
@@ -117,6 +117,124 @@ def serve(ctx, host: str, port: int, transport: str, workers: int):
         sys.exit(1)
 
 
+def _auto_detect_python_path(python_path: Optional[str]) -> str:
+    """Auto-detect Python path if not provided."""
+    if not python_path:
+        python_path = sys.executable
+        logger.debug(f"Auto-detected Python path: {python_path}")
+    return python_path
+
+
+def _auto_detect_pythonium_path(pythonium_path: Optional[str], python_path: str) -> str:
+    """Auto-detect pythonium path if not provided."""
+    if not pythonium_path:
+        try:
+            # Try to find pythonium module
+            import pythonium
+
+            pythonium_path = str(Path(pythonium.__file__).parent.parent)
+            logger.debug(f"Auto-detected pythonium path: {pythonium_path}")
+        except ImportError:
+            # Try to find it via command line
+            try:
+                result = subprocess.run(
+                    [python_path, "-c", "import pythonium; print(pythonium.__file__)"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                pythonium_file = result.stdout.strip()
+                pythonium_path = str(Path(pythonium_file).parent.parent)
+                logger.debug(f"Found pythonium via subprocess: {pythonium_path}")
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                logger.error(
+                    "Could not auto-detect pythonium path. Please specify --pythonium-path"
+                )
+                sys.exit(1)
+    return pythonium_path
+
+
+def _build_mcp_config(python_path: str) -> dict:
+    """Build MCP server configuration for pythonium."""
+    return {
+        "name": "pythonium",
+        "command": [python_path, "-m", "pythonium", "serve"],
+        "args": ["--transport", "stdio"],
+        "cwd": str(Path.home()),
+        "auto_start": True,
+        "description": "Pythonium MCP server for Python code analysis and execution",
+    }
+
+
+def _ensure_aixterm_config_exists(aixterm_config: Path) -> None:
+    """Ensure aixterm config file exists, creating it if necessary."""
+    if not aixterm_config.exists():
+        logger.info(f"AIxTerm config not found at {aixterm_config}, initializing...")
+        try:
+            # Run aixterm --init-config to create the default config
+            result = subprocess.run(
+                ["aixterm", "--init-config"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            logger.debug(f"aixterm --init-config output: {result.stdout}")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            logger.error(f"Failed to initialize aixterm config: {e}")
+            sys.exit(1)
+
+
+def _load_aixterm_config(aixterm_config: Path) -> Dict[Any, Any]:
+    """Load existing aixterm configuration."""
+    try:
+        with open(aixterm_config, "r") as f:
+            aixterm_config_data = json.load(f)
+        logger.debug(f"Loaded existing aixterm config from {aixterm_config}")
+        return cast(Dict[Any, Any], aixterm_config_data)
+    except Exception as e:
+        logger.error(f"Could not load aixterm config: {e}")
+        sys.exit(1)
+
+
+def _update_aixterm_config(
+    aixterm_config_data: dict, pythonium_mcp_config: dict
+) -> dict:
+    """Update aixterm config with pythonium MCP server configuration."""
+    if "mcp_servers" not in aixterm_config_data:
+        aixterm_config_data["mcp_servers"] = []
+
+    # Remove any existing pythonium server config
+    aixterm_config_data["mcp_servers"] = [
+        server
+        for server in aixterm_config_data["mcp_servers"]
+        if server.get("name") != "pythonium"
+    ]
+
+    # Add new pythonium server config
+    aixterm_config_data["mcp_servers"].append(pythonium_mcp_config)
+    return aixterm_config_data
+
+
+def _write_aixterm_config(aixterm_config: Path, aixterm_config_data: dict) -> None:
+    """Write updated configuration to aixterm config file."""
+    try:
+        # Create backup if file exists
+        if aixterm_config.exists():
+            backup_path = aixterm_config.with_suffix(".backup")
+            shutil.copy2(aixterm_config, backup_path)
+            logger.debug(f"Created backup at {backup_path}")
+
+        # Write new configuration
+        with open(aixterm_config, "w") as f:
+            json.dump(aixterm_config_data, f, indent=2)
+
+        console.print("[bold green]Pythonium MCP server configured for aixterm")
+
+    except Exception as e:
+        logger.error(f"Failed to write configuration: {e}")
+        sys.exit(1)
+
+
 @main.command("configure-aixterm")
 @click.option(
     "--aixterm-config",
@@ -151,84 +269,21 @@ def configure_aixterm(
     if not aixterm_config:
         aixterm_config = Path.home() / ".aixterm"
 
-    # Auto-detect python path
-    if not python_path:
-        python_path = sys.executable
-        logger.debug(f"Auto-detected Python path: {python_path}")
-
-    # Auto-detect pythonium path
-    if not pythonium_path:
-        try:
-            # Try to find pythonium module
-            import pythonium
-
-            pythonium_path = str(Path(pythonium.__file__).parent.parent)
-            logger.debug(f"Auto-detected pythonium path: {pythonium_path}")
-        except ImportError:
-            # Try to find it via command line
-            try:
-                result = subprocess.run(
-                    [python_path, "-c", "import pythonium; print(pythonium.__file__)"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                pythonium_file = result.stdout.strip()
-                pythonium_path = str(Path(pythonium_file).parent.parent)
-                logger.debug(f"Found pythonium via subprocess: {pythonium_path}")
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                logger.error("Could not auto-detect pythonium path. Please specify --pythonium-path")
-                sys.exit(1)
+    # Auto-detect paths
+    python_path = _auto_detect_python_path(python_path)
+    pythonium_path = _auto_detect_pythonium_path(pythonium_path, python_path)
 
     # Build MCP server configuration
-    pythonium_mcp_config = {
-        "name": "pythonium",
-        "command": [python_path, "-m", "pythonium", "serve"],
-        "args": ["--transport", "stdio"],
-        "cwd": str(Path.home()),
-        "auto_start": True,
-        "description": "Pythonium MCP server for Python code analysis and execution",
-    }
+    pythonium_mcp_config = _build_mcp_config(python_path)
 
-    # Check if aixterm config exists, if not, initialize it first
-    if not aixterm_config.exists():
-        logger.info(f"AIxTerm config not found at {aixterm_config}, initializing...")
-        try:
-            # Run aixterm --init-config to create the default config
-            result = subprocess.run(
-                ["aixterm", "--init-config"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            logger.debug(f"aixterm --init-config output: {result.stdout}")
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            logger.error(f"Failed to initialize aixterm config: {e}")
-            sys.exit(1)
-
-    # Load existing aixterm config
-    aixterm_config_data = {}
-    try:
-        with open(aixterm_config, "r") as f:
-            aixterm_config_data = json.load(f)
-        logger.debug(f"Loaded existing aixterm config from {aixterm_config}")
-    except Exception as e:
-        logger.error(f"Could not load aixterm config: {e}")
-        sys.exit(1)
+    # Ensure config exists and load it
+    _ensure_aixterm_config_exists(aixterm_config)
+    aixterm_config_data = _load_aixterm_config(aixterm_config)
 
     # Update configuration
-    if "mcp_servers" not in aixterm_config_data:
-        aixterm_config_data["mcp_servers"] = []
-
-    # Remove any existing pythonium server config
-    aixterm_config_data["mcp_servers"] = [
-        server
-        for server in aixterm_config_data["mcp_servers"]
-        if server.get("name") != "pythonium"
-    ]
-
-    # Add new pythonium server config
-    aixterm_config_data["mcp_servers"].append(pythonium_mcp_config)
+    aixterm_config_data = _update_aixterm_config(
+        aixterm_config_data, pythonium_mcp_config
+    )
 
     if dry_run:
         console.print(
@@ -239,22 +294,7 @@ def configure_aixterm(
         return
 
     # Write configuration
-    try:
-        # Create backup if file exists
-        if aixterm_config.exists():
-            backup_path = aixterm_config.with_suffix(".backup")
-            shutil.copy2(aixterm_config, backup_path)
-            logger.debug(f"Created backup at {backup_path}")
-
-        # Write new configuration
-        with open(aixterm_config, "w") as f:
-            json.dump(aixterm_config_data, f, indent=2)
-
-        console.print("[bold green]Pythonium MCP server configured for aixterm")
-
-    except Exception as e:
-        logger.error(f"Failed to write configuration: {e}")
-        sys.exit(1)
+    _write_aixterm_config(aixterm_config, aixterm_config_data)
 
 
 if __name__ == "__main__":

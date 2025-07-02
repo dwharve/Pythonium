@@ -8,7 +8,6 @@ and service monitoring.
 
 from .command_execution import (
     CommandHistoryTool,
-    ExecuteCommandTool,
     ShellEnvironmentTool,
     WhichCommandTool,
 )
@@ -34,7 +33,6 @@ __all__ = [
     "DiskUsageTool",
     "NetworkInfoTool",
     # Command Execution
-    "ExecuteCommandTool",
     "WhichCommandTool",
     "CommandHistoryTool",
     "ShellEnvironmentTool",

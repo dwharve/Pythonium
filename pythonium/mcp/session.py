@@ -49,6 +49,7 @@ class SessionInfo:
     remote_address: Optional[str] = None
     user_agent: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    subscriptions: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -277,6 +278,36 @@ class SessionManager:
     ) -> Any:
         """Get session context value."""
         return self._session_contexts.get(session_id, {}).get(key, default)
+
+    async def add_subscription(self, session_id: str, uri: str) -> None:
+        """Add a resource subscription for a session."""
+        if session_id in self._sessions:
+            session_info = self._sessions[session_id]
+            if uri not in session_info.subscriptions:
+                session_info.subscriptions.append(uri)
+                logger.debug(f"Session {session_id} subscribed to {uri}")
+
+    async def remove_subscription(self, session_id: str, uri: str) -> None:
+        """Remove a resource subscription for a session."""
+        if session_id in self._sessions:
+            session_info = self._sessions[session_id]
+            if uri in session_info.subscriptions:
+                session_info.subscriptions.remove(uri)
+                logger.debug(f"Session {session_id} unsubscribed from {uri}")
+
+    async def get_subscriptions(self, session_id: str) -> List[str]:
+        """Get all subscriptions for a session."""
+        if session_id in self._sessions:
+            return self._sessions[session_id].subscriptions.copy()
+        return []
+
+    async def get_subscribers(self, uri: str) -> List[str]:
+        """Get all sessions subscribed to a specific resource URI."""
+        subscribers = []
+        for session_id, session_info in self._sessions.items():
+            if uri in session_info.subscriptions:
+                subscribers.append(session_id)
+        return subscribers
 
     async def record_request(self, session_id: str, request: MCPRequest) -> None:
         """Record a request for metrics."""

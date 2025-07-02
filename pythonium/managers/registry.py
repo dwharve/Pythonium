@@ -101,20 +101,24 @@ class ManagerRegistry(BaseComponent):
             # Check if constructor accepts a name parameter
             try:
                 sig = inspect.signature(manager_type.__init__)
-                if len(sig.parameters) > 1:  # self + at least one other parameter
+                params = list(sig.parameters.keys())
+
+                # If the constructor is overridden and doesn't accept 'name' parameter
+                if len(params) == 1 and params[0] == "self":  # Only self parameter
+
+                    def _create_manager_no_args():
+                        # For managers that override __init__ and don't take name parameter
+                        return manager_type()  # type: ignore[call-arg]
+
+                    factory = _create_manager_no_args
+                else:  # Constructor accepts name parameter (BaseManager default)
 
                     def _create_manager_with_name():
                         return manager_type(name)
 
                     factory = _create_manager_with_name
-                else:  # Only self parameter
-
-                    def _create_manager_no_args():
-                        return manager_type(name)
-
-                    factory = _create_manager_no_args
             except Exception:
-                # Fallback to constructor with name
+                # Fallback to constructor with name for BaseManager compatibility
                 def _create_manager_fallback():
                     return manager_type(name)
 

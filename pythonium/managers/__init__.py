@@ -6,7 +6,7 @@ focused plugin framework including configuration, plugin, resource,
 and security managers.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 # Core manager framework
 from pythonium.common.lifecycle import ComponentState

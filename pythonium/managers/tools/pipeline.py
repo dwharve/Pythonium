@@ -11,13 +11,20 @@ import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Union, cast
 
 from pythonium.common.exceptions import PythoniumError
+from pythonium.tools.base import ToolContext
 
 from .dependency import DependencyManager
+from .registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
+
+# Progress callback type
+ProgressCallback = Callable[[str], None]
+AsyncProgressCallback = Callable[[str], Awaitable[None]]
+ProgressCallbackType = Union[ProgressCallback, AsyncProgressCallback]
 
 
 class ExecutionStatus(Enum):
@@ -52,6 +59,7 @@ class ExecutionResult:
     end_time: Optional[datetime] = None
     duration_ms: Optional[float] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    progress_token: Optional[Union[str, int]] = None
 
     @property
     def success(self) -> bool:
@@ -62,6 +70,14 @@ class ExecutionResult:
     def failed(self) -> bool:
         """Check if execution failed."""
         return self.status == ExecutionStatus.FAILED
+
+    @property
+    def data(self) -> Any:
+        """Get result data for compatibility."""
+        # If result is a Result object, extract its data
+        if hasattr(self.result, "data"):
+            return self.result.data
+        return self.result
 
 
 @dataclass
@@ -74,6 +90,8 @@ class ExecutionContext:
     timeout: Optional[float] = None
     retry_count: int = 0
     max_retries: int = 0
+    progress_callback: Optional[ProgressCallbackType] = None
+    progress_token: Optional[Union[str, int]] = None
 
 
 class ExecutionError(PythoniumError):
@@ -102,14 +120,16 @@ class ExecutionPipeline:
 
     def __init__(
         self,
+        tool_registry: Optional[ToolRegistry] = None,
         dependency_manager: Optional[DependencyManager] = None,
         default_timeout: Optional[float] = None,
         max_concurrent: int = 10,
     ):
+        self.tool_registry = tool_registry or ToolRegistry()
         self.dependency_manager = dependency_manager or DependencyManager()
         self.default_timeout = default_timeout
         self.max_concurrent = max_concurrent
-        self._tool_registry: Dict[str, Callable] = {}
+        self._tool_registry: Dict[str, Callable] = {}  # Legacy support
         self._execution_hooks: Dict[str, List[Callable]] = {
             "before_execution": [],
             "after_execution": [],
@@ -183,6 +203,8 @@ class ExecutionPipeline:
         timeout: Optional[float] = None,
         max_retries: int = 0,
         metadata: Optional[Dict[str, Any]] = None,
+        progress_callback: Optional[ProgressCallbackType] = None,
+        progress_token: Optional[Union[str, int]] = None,
     ) -> ExecutionResult:
         """
         Execute a single tool.
@@ -193,15 +215,21 @@ class ExecutionPipeline:
             timeout: Execution timeout
             max_retries: Maximum retry attempts
             metadata: Additional metadata
+            progress_callback: Optional progress callback function
+            progress_token: Optional progress token for tracking
 
         Returns:
             ExecutionResult containing the result or error
         """
-        if tool_id not in self._tool_registry:
+        if (
+            tool_id not in self.tool_registry.tools
+            and tool_id not in self._tool_registry
+        ):
             return ExecutionResult(
                 tool_id=tool_id,
                 status=ExecutionStatus.FAILED,
                 error=ExecutionError(f"Tool {tool_id} not registered"),
+                progress_token=progress_token,
             )
 
         context = ExecutionContext(
@@ -210,6 +238,8 @@ class ExecutionPipeline:
             timeout=timeout or self.default_timeout,
             max_retries=max_retries,
             metadata=metadata or {},
+            progress_callback=progress_callback,
+            progress_token=progress_token,
         )
 
         return await self._execute_tool(context)
@@ -419,91 +449,17 @@ class ExecutionPipeline:
 
     async def _execute_tool(self, context: ExecutionContext) -> ExecutionResult:
         """Execute a single tool with retry logic."""
-        tool_func = self._tool_registry[context.tool_id]
-
-        for attempt in range(context.max_retries + 1):
-            result = ExecutionResult(
+        tool_func = self._get_tool_function(context)
+        if not tool_func:
+            return ExecutionResult(
                 tool_id=context.tool_id,
-                status=ExecutionStatus.PENDING,
-                start_time=datetime.now(),
+                status=ExecutionStatus.FAILED,
+                error=ExecutionError(f"Tool {context.tool_id} not found"),
+                progress_token=context.progress_token,
             )
 
-            try:
-                # Run before_execution hooks
-                await self._run_hooks("before_execution", context, result)
-
-                result.status = ExecutionStatus.RUNNING
-
-                # Execute the tool
-                if asyncio.iscoroutinefunction(tool_func):
-                    if context.timeout:
-                        task_result = await asyncio.wait_for(
-                            tool_func(**context.args), timeout=context.timeout
-                        )
-                    else:
-                        task_result = await tool_func(**context.args)
-                else:
-                    # Run sync function in executor
-                    loop = asyncio.get_event_loop()
-                    if context.timeout:
-                        task_result = await asyncio.wait_for(
-                            loop.run_in_executor(
-                                None, lambda: tool_func(**context.args)
-                            ),
-                            timeout=context.timeout,
-                        )
-                    else:
-                        task_result = await loop.run_in_executor(
-                            None, lambda: tool_func(**context.args)
-                        )
-
-                # Success
-                result.status = ExecutionStatus.COMPLETED
-                result.result = task_result
-                result.end_time = datetime.now()
-                if result.start_time is not None:
-                    result.duration_ms = (
-                        result.end_time - result.start_time
-                    ).total_seconds() * 1000
-
-                # Run success hooks
-                await self._run_hooks("on_success", context, result)
-
-                logger.debug(
-                    f"Tool {context.tool_id} executed successfully in {result.duration_ms:.2f}ms"
-                )
-                return result
-
-            except asyncio.TimeoutError as e:
-                result.status = ExecutionStatus.FAILED
-                result.error = e
-                result.error_traceback = traceback.format_exc()
-                logger.warning(
-                    f"Tool {context.tool_id} timed out on attempt {attempt + 1}"
-                )
-
-            except Exception as e:
-                result.status = ExecutionStatus.FAILED
-                result.error = e
-                result.error_traceback = traceback.format_exc()
-                logger.warning(
-                    f"Tool {context.tool_id} failed on attempt {attempt + 1}: {e}"
-                )
-
-            finally:
-                if result.end_time is None:
-                    result.end_time = datetime.now()
-                    if result.start_time is not None:
-                        result.duration_ms = (
-                            result.end_time - result.start_time
-                        ).total_seconds() * 1000
-
-                # Run after_execution hooks
-                await self._run_hooks("after_execution", context, result)
-
-                if result.failed:
-                    # Run error hooks
-                    await self._run_hooks("on_error", context, result)
+        for attempt in range(context.max_retries + 1):
+            result = await self._execute_tool_attempt(tool_func, context)
 
             # Check if we should retry
             if attempt < context.max_retries and result.failed:
@@ -517,6 +473,129 @@ class ExecutionPipeline:
             return result
 
         return result
+
+    def _get_tool_function(self, context: ExecutionContext):
+        """Get tool function from registry."""
+        # Get tool function - check ToolRegistry first, then legacy registry
+        if context.tool_id in self.tool_registry.tools:
+            # Get tool from ToolRegistry
+            tool_registration = self.tool_registry.tools[context.tool_id]
+            tool_instance = tool_registration.tool_class()
+            return tool_instance
+        elif context.tool_id in self._tool_registry:
+            # Legacy support
+            return self._tool_registry[context.tool_id]
+        else:
+            return None
+
+    async def _execute_tool_attempt(
+        self, tool_func, context: ExecutionContext
+    ) -> ExecutionResult:
+        """Execute a single attempt of tool execution."""
+        result = ExecutionResult(
+            tool_id=context.tool_id,
+            status=ExecutionStatus.PENDING,
+            start_time=datetime.now(),
+            progress_token=context.progress_token,
+        )
+
+        try:
+            # Run before_execution hooks
+            await self._run_hooks("before_execution", context, result)
+
+            result.status = ExecutionStatus.RUNNING
+
+            # Report start progress
+            await self._report_progress(context, 0, 100)
+
+            # Execute the tool based on its type
+            task_result = await self._execute_tool_by_type(tool_func, context)
+
+            # Report completion progress
+            await self._report_progress(context, 100, 100)
+
+            # Success
+            result.status = ExecutionStatus.COMPLETED
+            result.result = task_result
+            result.end_time = datetime.now()
+            if result.start_time is not None:
+                result.duration_ms = (
+                    result.end_time - result.start_time
+                ).total_seconds() * 1000
+
+            # Run success hooks
+            await self._run_hooks("on_success", context, result)
+
+            logger.debug(
+                f"Tool {context.tool_id} executed successfully in {result.duration_ms:.2f}ms"
+            )
+            return result
+
+        except asyncio.TimeoutError as e:
+            result.status = ExecutionStatus.FAILED
+            result.error = e
+            result.error_traceback = traceback.format_exc()
+            logger.warning(f"Tool {context.tool_id} timed out on attempt")
+
+        except Exception as e:
+            result.status = ExecutionStatus.FAILED
+            result.error = e
+            result.error_traceback = traceback.format_exc()
+            logger.warning(f"Tool {context.tool_id} failed: {e}")
+
+        finally:
+            if result.end_time is None:
+                result.end_time = datetime.now()
+                if result.start_time is not None:
+                    result.duration_ms = (
+                        result.end_time - result.start_time
+                    ).total_seconds() * 1000
+
+            # Run after_execution hooks
+            await self._run_hooks("after_execution", context, result)
+
+            if result.failed:
+                # Run error hooks
+                await self._run_hooks("on_error", context, result)
+
+        return result
+
+    async def _execute_tool_by_type(self, tool_func, context: ExecutionContext):
+        """Execute tool based on its type (registry tool, async function, or sync function)."""
+        if hasattr(tool_func, "execute"):
+            # Tool from ToolRegistry - call execute method
+            return await self._execute_registry_tool(tool_func, context, 25, 75)
+        elif asyncio.iscoroutinefunction(tool_func):
+            # Legacy async function
+            if context.timeout:
+                return await asyncio.wait_for(
+                    self._execute_tool_with_progress(tool_func, context, 25, 75),
+                    timeout=context.timeout,
+                )
+            else:
+                return await self._execute_tool_with_progress(
+                    tool_func, context, 25, 75
+                )
+        else:
+            # Legacy sync function
+            loop = asyncio.get_event_loop()
+            if context.timeout:
+                return await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: self._execute_sync_tool_with_progress(
+                            tool_func, context, 25, 75
+                        ),
+                    ),
+                    timeout=context.timeout,
+                )
+            else:
+                return await loop.run_in_executor(
+                    None,
+                    lambda: self._execute_sync_tool_with_progress(
+                        tool_func, context, 25, 75
+                    ),
+                )
 
     async def _run_hooks(
         self, event: str, context: ExecutionContext, result: ExecutionResult
@@ -580,3 +659,136 @@ class ExecutionPipeline:
 
         self._active_executions.clear()
         logger.info("Pipeline shutdown complete")
+
+    async def _report_progress(
+        self, context: ExecutionContext, progress: int, total: int = 100
+    ) -> None:
+        """Report progress for a tool execution."""
+        if context.progress_callback and context.progress_token:
+            try:
+                # Create a formatted progress message
+                percentage = (progress / total) * 100 if total > 0 else 0
+                message = f"[{context.tool_id}] Progress: {progress}/{total} ({percentage:.1f}%)"
+
+                if asyncio.iscoroutinefunction(context.progress_callback):
+                    await context.progress_callback(message)
+                else:
+                    context.progress_callback(message)
+            except Exception as e:
+                logger.warning(f"Progress callback failed for {context.tool_id}: {e}")
+
+    async def _execute_tool_with_progress(
+        self,
+        tool_func: Callable,
+        context: ExecutionContext,
+        start_progress: int,
+        end_progress: int,
+    ) -> Any:
+        """Execute an async tool function with progress reporting."""
+        # Report start of execution
+        await self._report_progress(context, start_progress, 100)
+
+        # Execute the tool
+        result = await tool_func(**context.args)
+
+        # Report end of execution
+        await self._report_progress(context, end_progress, 100)
+
+        return result
+
+    def _execute_sync_tool_with_progress(
+        self,
+        tool_func: Callable,
+        context: ExecutionContext,
+        start_progress: int,
+        end_progress: int,
+    ) -> Any:
+        """Execute a sync tool function with progress reporting (called in executor)."""
+        # Note: For sync tools, we can't easily report intermediate progress
+        # as we're in a thread executor. The progress will be reported by the caller.
+        return tool_func(**context.args)
+
+    async def _execute_registry_tool(
+        self,
+        tool_instance,
+        context: ExecutionContext,
+        start_progress: int,
+        end_progress: int,
+    ) -> Any:
+        """Execute a tool from the ToolRegistry with progress support."""
+        try:
+            # Initialize tool if needed
+            await self._initialize_tool(tool_instance)
+
+            # Prepare parameters and context
+            parameters = self._prepare_tool_parameters(tool_instance, context)
+            tool_context = self._create_tool_context(context)
+
+            # Execute the tool
+            result = await tool_instance.execute(parameters, tool_context)
+
+            # Clean up tool if needed
+            await self._cleanup_tool(tool_instance)
+
+            return result
+
+        except Exception:
+            # Clean up on error
+            await self._cleanup_tool(tool_instance, ignore_errors=True)
+            raise
+
+    async def _initialize_tool(self, tool_instance):
+        """Initialize tool if it has an initialize method."""
+        if hasattr(tool_instance, "initialize"):
+            await tool_instance.initialize()
+
+    def _prepare_tool_parameters(self, tool_instance, context: ExecutionContext):
+        """Prepare parameters for tool execution based on tool type."""
+        # Check if the tool uses @validate_parameters decorator
+        execute_method = getattr(tool_instance, "execute", None)
+        if execute_method and hasattr(execute_method, "__wrapped__"):
+            # Tool uses @validate_parameters decorator, expects dictionary
+            return context.args
+        else:
+            # Tool expects object-style parameters
+            parameters = type("DynamicParams", (), context.args)()
+            for key, value in context.args.items():
+                setattr(parameters, key, value)
+            return parameters
+
+    def _create_tool_context(self, context: ExecutionContext):
+        """Create ToolContext with progress callback."""
+        tool_context = ToolContext()
+        if context.progress_callback:
+            tool_context.progress_callback = self._create_tool_progress_callback(
+                context
+            )
+        return tool_context
+
+    def _create_tool_progress_callback(self, context: ExecutionContext):
+        """Create a progress callback adapter for tool usage."""
+
+        def tool_progress_callback(message: str):
+            try:
+                if context.progress_callback:
+                    # Pass the message as-is to the progress callback
+                    if asyncio.iscoroutinefunction(context.progress_callback):
+                        asyncio.create_task(
+                            context.progress_callback(f"[{context.tool_id}] {message}")
+                        )
+                    else:
+                        context.progress_callback(f"[{context.tool_id}] {message}")
+            except Exception as e:
+                logger.warning(f"Progress callback failed: {e}")
+
+        return tool_progress_callback
+
+    async def _cleanup_tool(self, tool_instance, ignore_errors: bool = False):
+        """Clean up tool if it has a shutdown method."""
+        if hasattr(tool_instance, "shutdown"):
+            try:
+                await tool_instance.shutdown()
+            except Exception:
+                if not ignore_errors:
+                    raise
+                # Ignore shutdown errors during cleanup

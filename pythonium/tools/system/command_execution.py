@@ -6,17 +6,12 @@ considerations, output capture, and error handling.
 """
 
 import os
-import shlex
 import subprocess
 from datetime import datetime
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List
 
 from pythonium.common.base import Result
 from pythonium.common.error_handling import handle_tool_error
-from pythonium.common.parameter_validation import (
-    ExecuteCommandParams,
-    validate_parameters,
-)
 from pythonium.tools.base import (
     BaseTool,
     ParameterType,
@@ -24,176 +19,6 @@ from pythonium.tools.base import (
     ToolMetadata,
     ToolParameter,
 )
-
-
-class ExecuteCommandTool(BaseTool):
-    """Tool for executing system commands."""
-
-    async def initialize(self) -> None:
-        """Initialize the tool."""
-        pass
-
-    async def shutdown(self) -> None:
-        """Shutdown the tool."""
-        pass
-
-    @property
-    def metadata(self) -> ToolMetadata:
-        return ToolMetadata(
-            name="execute_command",
-            description="Execute a system command and return output with security considerations and error handling. Supports command arguments, working directory, timeout, shell execution, and environment variables.",
-            brief_description="Execute a system command and return output",
-            detailed_description="Execute a system command and return output with security considerations and error handling. Takes 'command' (required) as the command to run, 'args' (optional array) for command arguments, 'working_directory' for execution context, 'timeout' (default 30 seconds), 'capture_output' (boolean, default True), 'shell' (boolean for shell execution), 'environment' (object for env vars), and 'stdin' (optional string) for input to send to command's stdin. Powerful but dangerous - use with caution as it can execute any system command.",
-            category="system",
-            tags=[
-                "command",
-                "execute",
-                "system",
-                "shell",
-                "process",
-                "dangerous",
-            ],
-            dangerous=True,  # Command execution is dangerous
-            parameters=[
-                ToolParameter(
-                    name="command",
-                    type=ParameterType.STRING,
-                    description="Command to execute",
-                    required=True,
-                ),
-                ToolParameter(
-                    name="args",
-                    type=ParameterType.ARRAY,
-                    description="Command arguments (alternative to including in command string)",
-                    default=[],
-                ),
-                ToolParameter(
-                    name="working_directory",
-                    type=ParameterType.STRING,
-                    description="Working directory for command execution",
-                ),
-                ToolParameter(
-                    name="timeout",
-                    type=ParameterType.INTEGER,
-                    description="Timeout in seconds",
-                    default=30,
-                ),
-                ToolParameter(
-                    name="capture_output",
-                    type=ParameterType.BOOLEAN,
-                    description="Capture stdout and stderr",
-                    default=True,
-                ),
-                ToolParameter(
-                    name="shell",
-                    type=ParameterType.BOOLEAN,
-                    description="Execute command through shell",
-                    default=False,
-                ),
-                ToolParameter(
-                    name="environment",
-                    type=ParameterType.OBJECT,
-                    description="Environment variables to set",
-                    default={},
-                ),
-                ToolParameter(
-                    name="stdin",
-                    type=ParameterType.STRING,
-                    description="Input to send to command's stdin",
-                ),
-            ],
-        )
-
-    @validate_parameters(ExecuteCommandParams)
-    @handle_tool_error
-    async def execute(
-        self, parameters: ExecuteCommandParams, context: ToolContext
-    ) -> Result:
-        """Execute the command execution operation."""
-        try:
-            command = parameters.command
-            args = parameters.args or []
-            working_directory = parameters.working_directory
-            timeout = parameters.timeout
-            capture_output = parameters.capture_output
-            use_shell = parameters.shell
-            environment = parameters.environment or {}
-            stdin_input = parameters.stdin
-
-            # Prepare command
-            cmd: Union[str, List[str]]
-            if args:
-                # Use command and args separately
-                cmd = [command] + args
-            elif use_shell:
-                # Use shell command as string
-                cmd = command
-            else:
-                # Split command string into components
-                cmd = shlex.split(command)
-
-            # Prepare environment
-            env = os.environ.copy()
-            env.update(environment)
-
-            # Prepare working directory
-            cwd = working_directory if working_directory else None
-
-            # Execute command
-            start_time = datetime.now()
-
-            if capture_output:
-                result = subprocess.run(
-                    cmd,
-                    cwd=cwd,
-                    env=env,
-                    shell=use_shell,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout,
-                    input=stdin_input,
-                )
-
-                output_data = {
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                    "returncode": result.returncode,
-                    "execution_time": (datetime.now() - start_time).total_seconds(),
-                }
-            else:
-                result = subprocess.run(
-                    cmd,
-                    cwd=cwd,
-                    env=env,
-                    shell=use_shell,
-                    timeout=timeout,
-                    input=stdin_input,
-                    text=True if stdin_input else False,
-                )
-
-                output_data = {
-                    "returncode": result.returncode,
-                    "execution_time": (datetime.now() - start_time).total_seconds(),
-                }
-
-            # Check if command was successful
-            if result.returncode != 0:
-                error_msg = f"Command failed with return code {result.returncode}"
-                if capture_output and result.stderr:
-                    error_msg += f": {result.stderr}"
-
-                return Result.error_result(error_msg)
-
-            return Result.success_result(output_data)
-
-        except subprocess.TimeoutExpired:
-            return Result.error_result(f"Command timed out after {timeout} seconds")
-        except FileNotFoundError:
-            return Result.error_result(f"Command not found: {command}")
-        except PermissionError as e:
-            return Result.error_result(f"Permission denied: {e}")
-        except Exception as e:
-            return Result.error_result(f"Command execution failed: {e}")
 
 
 class WhichCommandTool(BaseTool):

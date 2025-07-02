@@ -6,7 +6,7 @@ server designed to enable advanced capabilities for AI agents through a modular
 architecture.
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __author__ = "David Harvey"
 __email__ = "dwh.exis@gmail.com"
 __description__ = "A modular MCP server for AI agents"

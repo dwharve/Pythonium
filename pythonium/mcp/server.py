@@ -128,6 +128,10 @@ class MCPServer:
                 session_manager=self.session_manager,
                 message_handler=self._handle_transport_message,
             )
+
+            # Set transport on message handler for notifications
+            self.message_handler.set_transport(self.transport)
+
             await self.transport.start()
 
             # Setup signal handlers

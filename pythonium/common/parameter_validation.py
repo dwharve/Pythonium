@@ -401,14 +401,6 @@ class SearchTextParams(ParameterModel):
         None, description="Glob pattern to exclude files from search"
     )
 
-    @field_validator("path")
-    @classmethod
-    def validate_path(cls, v):
-        """Validate path format."""
-        if not v:
-            raise ValueError("Path cannot be empty")
-        return str(v)  # Convert Path to string
-
 
 class WebSearchParams(ParameterModel):
     """Parameter model for WebSearchTool."""
@@ -430,3 +422,24 @@ class WebSearchParams(ParameterModel):
     include_snippets: bool = Field(
         True, description="Include content snippets in results"
     )
+
+
+class DescribeToolParams(ParameterModel):
+    """Parameter model for DescribeToolTool."""
+
+    tool_name: str = Field(..., description="Name of the tool to describe")
+    include_examples: bool = Field(
+        True, description="Include usage examples in the description"
+    )
+    include_schema: bool = Field(True, description="Include parameter schema details")
+    include_metadata: bool = Field(
+        False, description="Include detailed metadata information"
+    )
+
+    @field_validator("tool_name")
+    @classmethod
+    def validate_tool_name(cls, v: str) -> str:
+        """Validate tool name format."""
+        if not v or not v.strip():
+            raise ValueError("Tool name cannot be empty")
+        return v.strip()

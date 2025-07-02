@@ -16,7 +16,6 @@ from pythonium.common.base import Result
 from pythonium.common.parameter_validation import (
     PortMonitorParams,
     ServiceStatusParams,
-    SystemLoadParams,
     validate_parameters,
 )
 from pythonium.tools.base import (
@@ -609,7 +608,6 @@ class SystemLoadTool(BaseTool):
             ],
         )
 
-    @validate_parameters(SystemLoadParams)
     def _initialize_load_info(self) -> Dict[str, Any]:
         """Initialize the load info structure."""
         return {

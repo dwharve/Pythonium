@@ -14,10 +14,6 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from pythonium.common.base import Result
-from pythonium.common.parameter_validation import (
-    SystemInfoToolParams,
-    validate_parameters,
-)
 from pythonium.tools.base import (
     BaseTool,
     ParameterType,
@@ -77,7 +73,6 @@ class SystemInfoTool(BaseTool):
             ],
         )
 
-    @validate_parameters(SystemInfoToolParams)
     def _get_basic_info(self) -> Dict[str, Any]:
         """Get basic system and user information."""
         return {

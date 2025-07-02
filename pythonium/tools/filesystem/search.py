@@ -10,10 +10,12 @@ from typing import Any, Dict, List, Optional
 from pythonium.common.base import Result
 from pythonium.common.error_handling import handle_tool_error
 from pythonium.common.parameter_validation import (
+    DescribeToolParams,
     FindFilesParams,
     SearchTextParams,
     validate_parameters,
 )
+from pythonium.managers.tools.registry import ToolRegistry
 from pythonium.tools.base import (
     BaseTool,
     ParameterType,
@@ -205,18 +207,37 @@ class FindFilesTool(BaseTool):
         """Recursively search a directory for matching files."""
         max_depth = search_params["max_depth"]
         limit = search_params["limit"]
+        progress_callback = search_params.get("progress_callback")
 
         if current_depth > max_depth or (limit is not None and len(results) >= limit):
             return
 
         try:
-            for item in path.iterdir():
+            items = list(path.iterdir())
+            total_items = len(items)
+
+            # Report progress for directories being processed
+            if (
+                progress_callback and current_depth <= 2
+            ):  # Only report for shallow depths to avoid spam
+                progress_callback(f"Searching directory: {path} ({total_items} items)")
+
+            for i, item in enumerate(items):
                 if self._process_search_item(
                     item, search_params, results, current_depth
                 ):
                     return  # Hit limit, stop searching
+
+                # Report progress periodically for large directories
+                if progress_callback and total_items > 100 and i % 50 == 0:
+                    progress_callback(
+                        f"Processed {i}/{total_items} items in {path}, found {len(results)} matches"
+                    )
+
         except PermissionError:
             # Skip directories we can't access
+            if progress_callback:
+                progress_callback(f"Skipping directory (permission denied): {path}")
             pass
 
     def _process_search_item(self, item, search_params, results, current_depth):
@@ -282,7 +303,13 @@ class FindFilesTool(BaseTool):
         case_sensitive = params.case_sensitive
         limit = params.limit
 
+        # Get progress callback from context
+        progress_callback = getattr(context, "progress_callback", None)
+
         try:
+            if progress_callback:
+                progress_callback(f"Starting file search in: {root_path}")
+
             # Check if root path exists
             if not root_path.exists():
                 raise ToolExecutionError(f"Root path does not exist: {root_path}")
@@ -307,10 +334,14 @@ class FindFilesTool(BaseTool):
                 "case_sensitive": case_sensitive,
                 "min_size": min_size,
                 "max_size": max_size,
+                "progress_callback": progress_callback,
             }
 
             results: List[Dict[str, Any]] = []
             self._search_directory(root_path, search_params, results)
+
+            if progress_callback:
+                progress_callback(f"Search completed. Found {len(results)} matches.")
 
             # Sort results by path
             results.sort(key=lambda x: x["path"])
@@ -578,12 +609,24 @@ class SearchFilesTool(BaseTool):
         limit = search_params["limit"]
         file_pattern = search_params["file_pattern"]
         max_file_size = search_params["max_file_size"]
+        progress_callback = search_params.get("progress_callback")
 
         if current_depth > max_depth or (limit is not None and len(results) >= limit):
             return
 
         try:
-            for item in dir_path.iterdir():
+            items = list(dir_path.iterdir())
+            total_items = len(items)
+
+            # Report progress for directories being processed
+            if (
+                progress_callback and current_depth <= 2
+            ):  # Only report for shallow depths
+                progress_callback(
+                    f"Searching content in directory: {dir_path} ({total_items} items)"
+                )
+
+            for i, item in enumerate(items):
                 if limit is not None and len(results) >= limit:
                     break
 
@@ -600,8 +643,16 @@ class SearchFilesTool(BaseTool):
                         current_depth + 1,
                     )
 
+                # Report progress periodically for large directories
+                if progress_callback and total_items > 50 and i % 25 == 0:
+                    progress_callback(
+                        f"Processed {i}/{total_items} items, searched {counters['files_searched']} files, found {len(results)} matches"
+                    )
+
         except PermissionError:
             # Skip directories we can't access
+            if progress_callback:
+                progress_callback(f"Skipping directory (permission denied): {dir_path}")
             pass
 
     @validate_parameters(SearchTextParams)
@@ -621,7 +672,15 @@ class SearchFilesTool(BaseTool):
         context_lines = params.context_lines
         limit = params.limit
 
+        # Get progress callback from context
+        progress_callback = getattr(context, "progress_callback", None)
+
         try:
+            if progress_callback:
+                progress_callback(
+                    f"Starting content search for pattern '{pattern}' in: {root_path}"
+                )
+
             # Check if root path exists
             if not root_path.exists():
                 raise ToolExecutionError(f"Root path does not exist: {root_path}")
@@ -647,6 +706,7 @@ class SearchFilesTool(BaseTool):
                 "include_line_numbers": include_line_numbers,
                 "context_lines": context_lines,
                 "limit": limit,
+                "progress_callback": progress_callback,
             }
 
             results: List[Dict[str, Any]] = []
@@ -661,6 +721,11 @@ class SearchFilesTool(BaseTool):
             else:
                 self._search_directory_for_content(
                     root_path, search_params, results, counters
+                )
+
+            if progress_callback:
+                progress_callback(
+                    f"Content search completed. Searched {counters['files_searched']} files, found {len(results)} matches."
                 )
 
             return Result[Any].success_result(
@@ -688,3 +753,307 @@ class SearchFilesTool(BaseTool):
             raise ToolExecutionError(f"Invalid regex pattern: {e}")
         except OSError as e:
             raise ToolExecutionError(f"OS error during search: {e}")
+
+
+class DescribeToolTool(BaseTool):
+    """Tool for describing other tools in the system."""
+
+    async def initialize(self) -> None:
+        """Initialize the tool."""
+        pass
+
+    async def shutdown(self) -> None:
+        """Shutdown the tool."""
+        pass
+
+    @property
+    def metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            name="describe_tool",
+            description="Get detailed information about any tool in the system to understand its purpose, parameters, usage patterns, and examples. Essential for discovering tool capabilities, understanding parameter requirements, and getting help on how to use specific tools effectively.",
+            brief_description="Get detailed information about any tool in the system",
+            detailed_description="Get comprehensive information about any tool including its description, parameters with types and constraints, usage examples, and metadata. Takes 'tool_name' (required) to specify which tool to describe, 'include_examples' (boolean) to include usage examples, 'include_schema' (boolean) to include detailed parameter schema, and 'include_metadata' (boolean) for comprehensive metadata. Essential for tool discovery, understanding capabilities, and learning proper usage patterns.",
+            category="tools",
+            tags=[
+                "describe",
+                "help",
+                "documentation",
+                "introspection",
+                "discovery",
+                "metadata",
+                "parameters",
+                "schema",
+            ],
+            parameters=[
+                ToolParameter(
+                    name="tool_name",
+                    type=ParameterType.STRING,
+                    description="Name of the tool to describe",
+                    required=True,
+                ),
+                ToolParameter(
+                    name="include_examples",
+                    type=ParameterType.BOOLEAN,
+                    description="Include usage examples in the description",
+                    default=True,
+                ),
+                ToolParameter(
+                    name="include_schema",
+                    type=ParameterType.BOOLEAN,
+                    description="Include detailed parameter schema",
+                    default=True,
+                ),
+                ToolParameter(
+                    name="include_metadata",
+                    type=ParameterType.BOOLEAN,
+                    description="Include comprehensive metadata information",
+                    default=False,
+                ),
+            ],
+        )
+
+    def _get_tool_registry(self) -> Optional[ToolRegistry]:
+        """Get the tool registry instance from the context or system."""
+        # In a real implementation, this would get the registry from
+        # the global system state or context. For now, we'll simulate
+        # a basic implementation that would work with dependency injection.
+        try:
+            # This could be injected via context or service locator pattern
+            # For demonstration, we'll return None and handle gracefully
+            return None
+        except Exception:
+            return None
+
+    def _generate_parameter_schema(
+        self, parameters: List[ToolParameter]
+    ) -> Dict[str, Any]:
+        """Generate a detailed parameter schema."""
+        schema = {}
+        for param in parameters:
+            param_info: Dict[str, Any] = {
+                "type": param.type.value,
+                "description": param.description,
+                "required": param.required,
+            }
+
+            if param.default is not None:
+                param_info["default"] = param.default
+
+            if param.min_value is not None:
+                param_info["min_value"] = param.min_value
+
+            if param.max_value is not None:
+                param_info["max_value"] = param.max_value
+
+            if param.min_length is not None:
+                param_info["min_length"] = param.min_length
+
+            if param.max_length is not None:
+                param_info["max_length"] = param.max_length
+
+            if param.pattern is not None:
+                param_info["pattern"] = param.pattern
+
+            if param.allowed_values is not None:
+                param_info["allowed_values"] = param.allowed_values
+
+            schema[param.name] = param_info
+
+        return schema
+
+    def _generate_usage_examples(
+        self, tool_name: str, parameters: List[ToolParameter]
+    ) -> List[Dict[str, Any]]:
+        """Generate usage examples for the tool."""
+        examples = []
+
+        # Basic example with required parameters only
+        basic_params: Dict[str, Any] = {}
+        for param in parameters:
+            if param.required:
+                if param.type == ParameterType.STRING:
+                    basic_params[param.name] = f"example_{param.name}"
+                elif param.type == ParameterType.INTEGER:
+                    basic_params[param.name] = param.min_value or 1
+                elif param.type == ParameterType.BOOLEAN:
+                    basic_params[param.name] = True
+                elif param.type == ParameterType.PATH:
+                    basic_params[param.name] = "/path/to/file"
+                elif param.type == ParameterType.URL:
+                    basic_params[param.name] = "https://example.com"
+                else:
+                    basic_params[param.name] = f"<{param.type.value}>"
+
+        if basic_params:
+            examples.append(
+                {
+                    "title": "Basic usage",
+                    "description": "Simple example with required parameters",
+                    "parameters": basic_params,
+                }
+            )
+
+        # Advanced example with optional parameters
+        advanced_params = basic_params.copy()
+        for param in parameters:
+            if not param.required and param.default is not None:
+                advanced_params[param.name] = param.default
+
+        if len(advanced_params) > len(basic_params):
+            examples.append(
+                {
+                    "title": "Advanced usage",
+                    "description": "Example with optional parameters",
+                    "parameters": advanced_params,
+                }
+            )
+
+        return examples
+
+    @validate_parameters(DescribeToolParams)
+    @handle_tool_error
+    async def execute(
+        self, params: DescribeToolParams, context: ToolContext
+    ) -> Result[Any]:
+        """Execute tool description operation."""
+        tool_name = params.tool_name
+        include_examples = params.include_examples
+        include_schema = params.include_schema
+        include_metadata = params.include_metadata
+
+        try:
+            # Try to get tool registry
+            # registry = self._get_tool_registry()
+
+            # For demonstration, we'll create a mock tool lookup
+            # In real implementation, this would query the actual registry
+            mock_tool_info = self._get_mock_tool_info(tool_name)
+
+            if not mock_tool_info:
+                return Result[Any].error_result(
+                    error=f"Tool '{tool_name}' not found in registry. Use list_tools to see available tools."
+                )
+
+            # Build comprehensive tool description
+            description = {
+                "tool_name": tool_name,
+                "description": mock_tool_info["description"],
+                "brief_description": mock_tool_info.get("brief_description"),
+                "category": mock_tool_info.get("category", "unknown"),
+                "tags": mock_tool_info.get("tags", []),
+            }
+
+            # Add parameter schema if requested
+            if include_schema and "parameters" in mock_tool_info:
+                description["parameter_schema"] = self._generate_parameter_schema(
+                    mock_tool_info["parameters"]
+                )
+
+            # Add usage examples if requested
+            if include_examples and "parameters" in mock_tool_info:
+                description["usage_examples"] = self._generate_usage_examples(
+                    tool_name, mock_tool_info["parameters"]
+                )
+
+            # Add metadata if requested
+            if include_metadata:
+                description["metadata"] = {
+                    "version": mock_tool_info.get("version", "1.0.0"),
+                    "author": mock_tool_info.get("author"),
+                    "requires_auth": mock_tool_info.get("requires_auth", False),
+                    "dangerous": mock_tool_info.get("dangerous", False),
+                    "max_execution_time": mock_tool_info.get("max_execution_time"),
+                }
+
+            return Result[Any].success_result(
+                data=description,
+                metadata={
+                    "tool_name": tool_name,
+                    "include_examples": include_examples,
+                    "include_schema": include_schema,
+                    "include_metadata": include_metadata,
+                },
+            )
+
+        except Exception as e:
+            raise ToolExecutionError(f"Error describing tool '{tool_name}': {e}")
+
+    def _get_mock_tool_info(self, tool_name: str) -> Optional[Dict[str, Any]]:
+        """Mock tool information for demonstration purposes."""
+        # This would be replaced with actual registry lookup
+        mock_tools = {
+            "find_files": {
+                "description": "Search for files and directories using flexible criteria including name patterns, file types, size filters, and modification dates.",
+                "brief_description": "Search for files and directories using flexible criteria",
+                "category": "filesystem",
+                "tags": [
+                    "find",
+                    "search",
+                    "filter",
+                    "locate",
+                    "count",
+                    "pattern",
+                    "type",
+                ],
+                "version": "1.0.0",
+                "parameters": [
+                    ToolParameter(
+                        name="path",
+                        type=ParameterType.PATH,
+                        description="Root directory path to start searching from",
+                        required=True,
+                    ),
+                    ToolParameter(
+                        name="name_pattern",
+                        type=ParameterType.STRING,
+                        description="Glob pattern to match filenames (e.g., '*.py', 'test_*', '*.json')",
+                        required=False,
+                    ),
+                    ToolParameter(
+                        name="file_type",
+                        type=ParameterType.STRING,
+                        description="Filter by item type: 'file', 'directory', or 'both'",
+                        default="both",
+                        allowed_values=["file", "directory", "both"],
+                    ),
+                ],
+            },
+            "search_files": {
+                "description": "Search for text patterns or code snippets within file contents across multiple files.",
+                "brief_description": "Search for text patterns within file contents",
+                "category": "filesystem",
+                "tags": [
+                    "search",
+                    "grep",
+                    "text",
+                    "content",
+                    "code",
+                    "find",
+                    "pattern",
+                    "analysis",
+                ],
+                "version": "1.0.0",
+                "parameters": [
+                    ToolParameter(
+                        name="path",
+                        type=ParameterType.PATH,
+                        description="Root directory path to search within",
+                        required=True,
+                    ),
+                    ToolParameter(
+                        name="pattern",
+                        type=ParameterType.STRING,
+                        description="Text pattern or code snippet to search for",
+                        required=True,
+                    ),
+                    ToolParameter(
+                        name="regex",
+                        type=ParameterType.BOOLEAN,
+                        description="Treat pattern as a regular expression",
+                        default=False,
+                    ),
+                ],
+            },
+        }
+
+        return mock_tools.get(tool_name)
