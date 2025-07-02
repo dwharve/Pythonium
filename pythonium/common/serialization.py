@@ -17,7 +17,6 @@ from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from typing import (
-    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -27,11 +26,6 @@ from typing import (
     TypeVar,
     Union,
 )
-
-if TYPE_CHECKING:
-    import orjson as orjson_module
-else:
-    orjson_module = None
 
 try:
     import orjson

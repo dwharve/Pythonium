@@ -26,14 +26,6 @@ from .parameters import DescribeToolParams, SearchToolsParams
 class DescribeToolTool(BaseTool):
     """Tool for describing other tools in the system."""
 
-    async def initialize(self) -> None:
-        """Initialize the tool."""
-        pass
-
-    async def shutdown(self) -> None:
-        """Shutdown the tool."""
-        pass
-
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
@@ -89,12 +81,8 @@ class DescribeToolTool(BaseTool):
             if context and hasattr(context, "registry"):
                 return cast(ToolRegistry, context.registry)
 
-            # Try to import and get a registry instance
-            from pythonium.managers.tools.registry import ToolRegistry
-
-            # Create a new registry instance as fallback
-            # In a real application, this should be injected or managed globally
-            return ToolRegistry()
+            # If no context registry available, return None to indicate error
+            return None
         except Exception:
             return None
 
@@ -297,14 +285,6 @@ class DescribeToolTool(BaseTool):
 class SearchToolsTool(BaseTool):
     """Tool for searching and discovering tools in the system."""
 
-    async def initialize(self) -> None:
-        """Initialize the tool."""
-        pass
-
-    async def shutdown(self) -> None:
-        """Shutdown the tool."""
-        pass
-
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
@@ -368,63 +348,41 @@ class SearchToolsTool(BaseTool):
         self, context: Optional[ToolContext] = None
     ) -> Optional[ToolRegistry]:
         """Get the tool registry instance from the context or system."""
-        print(f"DEBUG _get_tool_registry: context={context}")
-        print(f"DEBUG: context type: {type(context)}")
-
         try:
-            # Import first to ensure it's available
-            from pythonium.managers.tools.registry import ToolRegistry
-
             # Try to get registry from context if available
             if (
                 context
                 and hasattr(context, "registry")
                 and context.registry is not None
             ):
-                print(f"DEBUG: Found context.registry: {context.registry}")
-                print(f"DEBUG: context.registry type: {type(context.registry)}")
-                # For testing, the registry might be a mock, so return it directly
                 return context.registry  # type: ignore
 
-            print("DEBUG: Context or registry not available, creating new ToolRegistry")
-            # Create a new registry instance as fallback
-            # In a real application, this should be injected or managed globally
-            return ToolRegistry()
-        except Exception as e:
-            print(f"DEBUG: Exception in _get_tool_registry: {e}")
+            # If no context registry available, return None to indicate error
+            return None
+        except Exception:
             return None
 
     def _matches_query(self, tool: Dict[str, Any], query: str) -> bool:
         """Check if tool matches the search query."""
         query_lower = query.lower()
 
-        print(
-            f"DEBUG _matches_query: Checking tool '{tool['name']}' against query '{query}'"
-        )
-        print(f"DEBUG: Tool data: {tool}")
-
         # Check name
         if query_lower in tool["name"].lower():
-            print("DEBUG: Matched on name")
             return True
 
         # Check description
         if query_lower in tool.get("description", "").lower():
-            print("DEBUG: Matched on description")
             return True
 
         # Check brief description
         if query_lower in tool.get("brief_description", "").lower():
-            print("DEBUG: Matched on brief_description")
             return True
 
         # Check tags
         for tag in tool.get("tags", []):
             if query_lower in tag.lower():
-                print(f"DEBUG: Matched on tag '{tag}'")
                 return True
 
-        print("DEBUG: No match found")
         return False
 
     def _matches_category(self, tool: Dict[str, Any], category: str) -> bool:
@@ -442,20 +400,10 @@ class SearchToolsTool(BaseTool):
 
     def _get_tools_from_registry(self, registry) -> List[Dict[str, Any]]:
         """Get tools from registry and convert to search format."""
-        print(f"DEBUG _get_tools_from_registry: registry={registry}")
-        print(f"DEBUG: registry type: {type(registry)}")
-
         if not registry:
-            print("DEBUG: Registry is None or falsy")
             return []
 
         tool_registrations = registry.list_tools()
-        print(f"DEBUG: tool_registrations={tool_registrations}")
-        print(f"DEBUG: tool_registrations type: {type(tool_registrations)}")
-        print(
-            f"DEBUG: Number of registrations: {len(tool_registrations) if tool_registrations else 'None'}"
-        )
-
         all_tools = []
         for registration in tool_registrations:
             all_tools.append(
@@ -470,7 +418,6 @@ class SearchToolsTool(BaseTool):
                     "parameters": registration.metadata.parameters,
                 }
             )
-        print(f"DEBUG: Converted {len(all_tools)} tools")
         return all_tools
 
     def _filter_tools(
@@ -563,17 +510,8 @@ class SearchToolsTool(BaseTool):
             registry = self._get_tool_registry(context)
             all_tools = self._get_tools_from_registry(registry)
 
-            # Debug output
-            print(f"DEBUG SearchToolsTool: Found {len(all_tools)} tools from registry")
-            for tool in all_tools:
-                print(f"DEBUG: Tool {tool['name']}: {tool}")
-
             # Filter tools based on search criteria
             matching_tools = self._filter_tools(all_tools, query, category, tags)
-
-            print(
-                f"DEBUG SearchToolsTool: After filtering, {len(matching_tools)} tools match"
-            )
 
             # Build result tools with requested information
             result_tools = self._build_result_tools(

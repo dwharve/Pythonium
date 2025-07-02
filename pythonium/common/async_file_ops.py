@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 try:
-    import aiofiles  # type: ignore
-    import aiofiles.os  # type: ignore
+    import aiofiles
+    import aiofiles.os
 
     HAS_AIOFILES = True
 except ImportError:
-    aiofiles = None
+    aiofiles = None  # type: ignore[assignment]
     HAS_AIOFILES = False
 
 from pythonium.common.exceptions import PythoniumError
@@ -142,7 +142,7 @@ class AsyncFileService:
             # Write content to file
             mode = "a" if append else "w"
             if self.use_aiofiles:
-                async with aiofiles.open(file_path, mode, encoding=encoding) as f:
+                async with aiofiles.open(str(file_path), mode=mode, encoding=encoding) as f:  # type: ignore[call-overload]
                     await f.write(content)
             else:
                 # Fallback to sync operation in thread pool

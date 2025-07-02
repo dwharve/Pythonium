@@ -294,6 +294,14 @@ class BaseTool(BaseComponent, ABC):
         self._metadata = None
         self._logger = logging.getLogger(f"pythonium.tools.{self.name}")
 
+    async def initialize(self) -> None:
+        """Initialize the tool (default implementation does nothing)."""
+        pass
+
+    async def shutdown(self) -> None:
+        """Shutdown the tool (default implementation does nothing)."""
+        pass
+
     @property
     @abstractmethod
     def metadata(self) -> ToolMetadata:

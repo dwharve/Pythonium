@@ -29,14 +29,6 @@ from pythonium.tools.base import (
 class ReadFileTool(BaseTool):
     """Tool for reading file contents."""
 
-    async def initialize(self) -> None:
-        """Initialize the tool."""
-        pass
-
-    async def shutdown(self) -> None:
-        """Shutdown the tool."""
-        pass
-
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
@@ -113,19 +105,10 @@ class ReadFileTool(BaseTool):
         except AsyncFileError as e:
             # Convert async file errors to tool execution errors
             raise ToolExecutionError(str(e)) from e
-            raise ToolExecutionError(f"OS error reading file: {e}")
 
 
 class WriteFileTool(BaseTool):
     """Tool for writing content to a file."""
-
-    async def initialize(self) -> None:
-        """Initialize the tool."""
-        pass
-
-    async def shutdown(self) -> None:
-        """Shutdown the tool."""
-        pass
 
     @property
     def metadata(self) -> ToolMetadata:
@@ -221,14 +204,6 @@ class WriteFileTool(BaseTool):
 class DeleteFileTool(BaseTool):
     """Tool for deleting files."""
 
-    async def initialize(self) -> None:
-        """Initialize the tool."""
-        pass
-
-    async def shutdown(self) -> None:
-        """Shutdown the tool."""
-        pass
-
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
@@ -299,14 +274,6 @@ class DeleteFileTool(BaseTool):
 
 class CreateFileTool(BaseTool):
     """Tool for creating empty files."""
-
-    async def initialize(self) -> None:
-        """Initialize the tool."""
-        pass
-
-    async def shutdown(self) -> None:
-        """Shutdown the tool."""
-        pass
 
     @property
     def metadata(self) -> ToolMetadata:

@@ -129,7 +129,6 @@ class ExecutionPipeline:
         self.dependency_manager = dependency_manager or DependencyManager()
         self.default_timeout = default_timeout
         self.max_concurrent = max_concurrent
-        self._tool_registry: Dict[str, Callable] = {}  # Legacy support
         self._execution_hooks: Dict[str, List[Callable]] = {
             "before_execution": [],
             "after_execution": [],
@@ -137,33 +136,6 @@ class ExecutionPipeline:
             "on_success": [],
         }
         self._active_executions: Dict[str, asyncio.Task] = {}
-
-    def register_tool(self, tool_id: str, tool_func: Callable) -> None:
-        """
-        Register a tool function for execution.
-
-        Args:
-            tool_id: Unique identifier for the tool
-            tool_func: Function to execute (can be sync or async)
-        """
-        self._tool_registry[tool_id] = tool_func
-        logger.debug(f"Registered tool: {tool_id}")
-
-    def unregister_tool(self, tool_id: str) -> bool:
-        """
-        Unregister a tool.
-
-        Args:
-            tool_id: Tool to unregister
-
-        Returns:
-            True if tool was unregistered, False if not found
-        """
-        if tool_id in self._tool_registry:
-            del self._tool_registry[tool_id]
-            logger.debug(f"Unregistered tool: {tool_id}")
-            return True
-        return False
 
     def add_hook(self, event: str, callback: Callable) -> None:
         """
@@ -221,10 +193,7 @@ class ExecutionPipeline:
         Returns:
             ExecutionResult containing the result or error
         """
-        if (
-            tool_id not in self.tool_registry.tools
-            and tool_id not in self._tool_registry
-        ):
+        if tool_id not in self.tool_registry.tools:
             return ExecutionResult(
                 tool_id=tool_id,
                 status=ExecutionStatus.FAILED,
@@ -408,7 +377,7 @@ class ExecutionPipeline:
 
         # Extract tool IDs and resolve dependencies
         tool_ids = [ctx.tool_id for ctx in contexts]
-        available_tools = set(self._tool_registry.keys())
+        available_tools = set(self.tool_registry.tools.keys())
 
         try:
             # Resolve execution order
@@ -476,15 +445,12 @@ class ExecutionPipeline:
 
     def _get_tool_function(self, context: ExecutionContext):
         """Get tool function from registry."""
-        # Get tool function - check ToolRegistry first, then legacy registry
+        # Get tool function - check ToolRegistry
         if context.tool_id in self.tool_registry.tools:
             # Get tool from ToolRegistry
             tool_registration = self.tool_registry.tools[context.tool_id]
             tool_instance = tool_registration.tool_class()
             return tool_instance
-        elif context.tool_id in self._tool_registry:
-            # Legacy support
-            return self._tool_registry[context.tool_id]
         else:
             return None
 
@@ -561,41 +527,13 @@ class ExecutionPipeline:
         return result
 
     async def _execute_tool_by_type(self, tool_func, context: ExecutionContext):
-        """Execute tool based on its type (registry tool, async function, or sync function)."""
+        """Execute tool based on its type (registry tool only)."""
         if hasattr(tool_func, "execute"):
             # Tool from ToolRegistry - call execute method
-            return await self._execute_registry_tool(tool_func, context, 25, 75)
-        elif asyncio.iscoroutinefunction(tool_func):
-            # Legacy async function
-            if context.timeout:
-                return await asyncio.wait_for(
-                    self._execute_tool_with_progress(tool_func, context, 25, 75),
-                    timeout=context.timeout,
-                )
-            else:
-                return await self._execute_tool_with_progress(
-                    tool_func, context, 25, 75
-                )
+            return await self._execute_registry_tool(tool_func, context)
         else:
-            # Legacy sync function
-            loop = asyncio.get_event_loop()
-            if context.timeout:
-                return await asyncio.wait_for(
-                    loop.run_in_executor(
-                        None,
-                        lambda: self._execute_sync_tool_with_progress(
-                            tool_func, context, 25, 75
-                        ),
-                    ),
-                    timeout=context.timeout,
-                )
-            else:
-                return await loop.run_in_executor(
-                    None,
-                    lambda: self._execute_sync_tool_with_progress(
-                        tool_func, context, 25, 75
-                    ),
-                )
+            # Invalid tool type
+            raise ValueError(f"Tool {context.tool_id} must implement execute method")
 
     async def _run_hooks(
         self, event: str, context: ExecutionContext, result: ExecutionResult
@@ -639,7 +577,7 @@ class ExecutionPipeline:
 
     def get_registered_tools(self) -> List[str]:
         """Get list of registered tools."""
-        return list(self._tool_registry.keys())
+        return list(self.tool_registry.tools.keys())
 
     async def shutdown(self) -> None:
         """Shutdown the pipeline and cancel all active executions."""
@@ -677,45 +615,12 @@ class ExecutionPipeline:
             except Exception as e:
                 logger.warning(f"Progress callback failed for {context.tool_id}: {e}")
 
-    async def _execute_tool_with_progress(
-        self,
-        tool_func: Callable,
-        context: ExecutionContext,
-        start_progress: int,
-        end_progress: int,
-    ) -> Any:
-        """Execute an async tool function with progress reporting."""
-        # Report start of execution
-        await self._report_progress(context, start_progress, 100)
-
-        # Execute the tool
-        result = await tool_func(**context.args)
-
-        # Report end of execution
-        await self._report_progress(context, end_progress, 100)
-
-        return result
-
-    def _execute_sync_tool_with_progress(
-        self,
-        tool_func: Callable,
-        context: ExecutionContext,
-        start_progress: int,
-        end_progress: int,
-    ) -> Any:
-        """Execute a sync tool function with progress reporting (called in executor)."""
-        # Note: For sync tools, we can't easily report intermediate progress
-        # as we're in a thread executor. The progress will be reported by the caller.
-        return tool_func(**context.args)
-
     async def _execute_registry_tool(
         self,
         tool_instance,
         context: ExecutionContext,
-        start_progress: int,
-        end_progress: int,
     ) -> Any:
-        """Execute a tool from the ToolRegistry with progress support."""
+        """Execute a tool from the ToolRegistry."""
         try:
             # Initialize tool if needed
             await self._initialize_tool(tool_instance)

@@ -182,9 +182,7 @@ def _create_component_filter(component_filters: Dict[str, str]):
     return filter_func
 
 
-def configure_component_logging(
-    component_name: str, level: Union[str, LogLevel]
-) -> None:
+def configure_component_logging(level: Union[str, LogLevel]) -> None:
     """Configure logging for a specific component."""
     # This would be used to set component-specific log levels
     # Implementation depends on how we want to manage component-specific settings
@@ -221,7 +219,7 @@ class LoggingContextManager:
 
         return loguru_logger
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, *args):
         """Exit logging context."""
         # Restore original handlers
         loguru_logger.configure(handlers=self.original_handlers)

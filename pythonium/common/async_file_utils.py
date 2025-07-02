@@ -9,12 +9,12 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 try:
-    import aiofiles  # type: ignore
-    import aiofiles.os  # type: ignore
+    import aiofiles
+    import aiofiles.os
 
     HAS_AIOFILES = True
 except ImportError:
-    aiofiles = None
+    aiofiles = None  # type: ignore[assignment]
     HAS_AIOFILES = False
 
 from pythonium.common.exceptions import PythoniumError
@@ -147,7 +147,7 @@ class AsyncFileUtils:
 
             # Use aiofiles if available, fallback to sync
             if HAS_AIOFILES:
-                async with aiofiles.open(file_path, mode=mode, encoding=encoding) as f:
+                async with aiofiles.open(str(file_path), mode=mode, encoding=encoding) as f:  # type: ignore[call-overload]
                     await f.write(content)
             else:
                 # Fallback to synchronous write
@@ -272,7 +272,7 @@ class AsyncFileUtils:
 
             # Use aiofiles if available, fallback to sync
             if HAS_AIOFILES:
-                async with aiofiles.open(file_path, mode=mode) as f:
+                async with aiofiles.open(str(file_path), mode=mode) as f:  # type: ignore[call-overload]
                     await f.write(content)
             else:
                 # Fallback to synchronous write

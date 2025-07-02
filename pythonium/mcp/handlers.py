@@ -807,19 +807,8 @@ class MCPMessageHandler:
 
     def register_tool(self, tool: BaseTool) -> None:
         """Register a tool with the handler."""
-        # First register with the tool registry, which returns the tool_id
+        # Register with the tool registry, which returns the tool_id
         tool_id = self.tool_registry.register_tool(tool.__class__)
-
-        # Create a wrapper function that uses the tool's run method (includes validation)
-        async def tool_wrapper(**kwargs):
-            from pythonium.tools.base import ToolContext
-
-            context = ToolContext()
-            result = await tool.run(kwargs, context)
-            return result  # Return the full ToolResult object
-
-        # Register with execution pipeline using the same tool_id
-        self.execution_pipeline.register_tool(tool_id, tool_wrapper)
         logger.debug(f"Registered tool: {tool_id}")
 
     async def send_notification(

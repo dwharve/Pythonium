@@ -29,31 +29,37 @@ pythonium/
 Abstract base class for all plugins in the Pythonium system.
 
 ```python
-from pythonium.common.base import BasePlugin
+from pythonium.common.plugins import BasePlugin
 
 class MyPlugin(BasePlugin):
-    def get_name(self) -> str:
+    @property
+    def plugin_name(self) -> str:
         return "my-plugin"
     
-    def get_version(self) -> str:
+    @property
+    def plugin_version(self) -> str:
         return "1.0.0"
+    
+    @property
+    def plugin_description(self) -> str:
+        return "Description of my plugin"
     
     async def initialize(self) -> None:
         # Plugin initialization logic
         pass
     
-    async def cleanup(self) -> None:
+    async def shutdown(self) -> None:
         # Plugin cleanup logic
         pass
 ```
 
-**Methods:**
-- `get_name() -> str`: Returns the plugin name
-- `get_version() -> str`: Returns the plugin version
-- `get_description() -> str`: Returns the plugin description
-- `get_dependencies() -> List[str]`: Returns list of dependency names
+**Properties:**
+- `plugin_name -> str`: Returns the plugin name (abstract property)
+- `plugin_version -> str`: Returns the plugin version (abstract property)
+- `plugin_description -> str`: Returns the plugin description (abstract property)
+- `get_plugin_dependencies() -> List[PluginDependency]`: Returns list of plugin dependencies (abstract method)
 - `async initialize() -> None`: Initialize the plugin
-- `async cleanup() -> None`: Clean up plugin resources
+- `async shutdown() -> None`: Clean up plugin resources
 - `is_initialized() -> bool`: Check if plugin is initialized
 
 #### `BaseManager`

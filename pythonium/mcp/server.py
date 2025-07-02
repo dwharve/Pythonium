@@ -425,7 +425,7 @@ class MCPServer:
         if hasattr(signal, "SIGINT"):
             signal.signal(signal.SIGINT, self._signal_handler)
 
-    def _signal_handler(self, signum, frame) -> None:
+    def _signal_handler(self, signum, _) -> None:
         """Handle shutdown signals."""
         logger.info(f"Received signal {signum}, initiating shutdown...")
 

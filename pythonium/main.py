@@ -76,13 +76,8 @@ def main(ctx, config: Optional[Path], log_level: str, verbose: bool):
     type=click.Choice(["stdio", "http", "websocket"]),
     help="Transport protocol",
 )
-@click.option(
-    "--workers",
-    default=1,
-    help="Number of worker processes",
-)
 @click.pass_context
-def serve(ctx, host: str, port: int, transport: str, workers: int):
+def serve(ctx, host: str, port: int, transport: str):
     """Start the MCP server."""
     config_path = ctx.obj.get("config_path")
     log_level = ctx.obj.get("log_level", "INFO")

@@ -66,7 +66,7 @@ class PluginSandbox:
             builtins.__import__ = self._sandboxed_import
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, *args):
         """Exit sandbox context."""
         if self._original_import:
             import builtins
@@ -596,5 +596,5 @@ class nullcontext:
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, *args):
         pass

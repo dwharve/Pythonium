@@ -429,7 +429,7 @@ class ErrorContext:
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, _, exc_value, __):
         if exc_value:
             self.exception = exc_value
             get_error_reporter().report_error(
