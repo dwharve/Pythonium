@@ -18,6 +18,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from pythonium.common import CacheError
+
 logger = logging.getLogger(__name__)
 
 
@@ -196,9 +198,11 @@ class ResultCache:
                 return len(gzip.compress(pickle.dumps(value)))
             else:
                 return len(pickle.dumps(value))
-        except Exception:
-            # Fallback to string representation
-            return len(str(value).encode("utf-8"))
+        except Exception as e:
+            raise CacheError(
+                f"Failed to estimate cache entry size for {type(value).__name__}: {e}. "
+                f"Value may not be serializable."
+            ) from e
 
     async def get(
         self,

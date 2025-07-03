@@ -11,8 +11,8 @@ from datetime import datetime, timedelta
 import pytest
 
 from pythonium.common.lifecycle import ComponentState
-from pythonium.mcp.protocol import ClientCapabilities, InitializeParams
-from pythonium.mcp.session import (
+from pythonium.mcp_legacy.protocol import ClientCapabilities, InitializeParams
+from pythonium.mcp_legacy.session import (
     ConnectionType,
     SessionInfo,
     SessionManager,

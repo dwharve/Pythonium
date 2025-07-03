@@ -104,25 +104,16 @@ class FileInfo:
         accessed_at = datetime.fromtimestamp(stat_result.st_atime)
 
         # Get owner/group info (Unix only)
-        owner = None
-        group = None
-        try:
-            import grp
-            import pwd
+        import grp
+        import pwd
 
-            owner = pwd.getpwuid(stat_result.st_uid).pw_name
-            group = grp.getgrgid(stat_result.st_gid).gr_name
-        except (ImportError, KeyError):
-            pass
+        owner = pwd.getpwuid(stat_result.st_uid).pw_name
+        group = grp.getgrgid(stat_result.st_gid).gr_name
 
         # Get MIME type
-        mime_type = None
-        try:
-            import mimetypes
+        import mimetypes
 
-            mime_type, _ = mimetypes.guess_type(str(path))
-        except ImportError:
-            pass
+        mime_type, _ = mimetypes.guess_type(str(path))
 
         # Calculate hashes for files
         hash_md5 = None

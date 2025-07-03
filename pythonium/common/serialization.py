@@ -27,13 +27,7 @@ from typing import (
     Union,
 )
 
-try:
-    import orjson
-
-    HAS_ORJSON = True
-except ImportError:
-    orjson = None  # type: ignore
-    HAS_ORJSON = False
+import orjson
 
 from pythonium.common.exceptions import PythoniumError
 from pythonium.common.logging import get_logger
@@ -81,7 +75,6 @@ class SerializationOptions:
     include_metadata: bool = True
     pretty_print: bool = False
     encoding: str = "utf-8"
-    use_orjson: bool = True  # Use orjson for JSON when available
     custom_encoders: Dict[Type, Callable[[Any], Any]] = field(default_factory=dict)
     custom_decoders: Dict[str, Callable[[Any], Any]] = field(default_factory=dict)
 
@@ -133,7 +126,6 @@ class JSONSerializer(BaseSerializer[Any]):
 
     def __init__(self, options: Optional[SerializationOptions] = None):
         super().__init__(options)
-        self.use_orjson = HAS_ORJSON and getattr(self.options, "use_orjson", True)
 
         self._default_encoders = {
             datetime: lambda dt: {"__datetime__": dt.isoformat()},
@@ -180,23 +172,13 @@ class JSONSerializer(BaseSerializer[Any]):
             else:
                 wrapper = serializable_obj
 
-            # Serialize to JSON using orjson or standard json
-            if self.use_orjson:
-                # Use orjson for better performance
-                orjson_options = 0
-                if self.options.pretty_print:
-                    orjson_options |= orjson.OPT_INDENT_2
+            # Serialize to JSON using orjson
+            orjson_options = 0
+            if self.options.pretty_print:
+                orjson_options |= orjson.OPT_INDENT_2
 
-                # orjson returns bytes directly
-                data = orjson.dumps(wrapper, option=orjson_options)
-            else:
-                # Fallback to standard json
-                json_kwargs: Dict[str, Any] = {}
-                if self.options.pretty_print:
-                    json_kwargs.update({"indent": 2, "sort_keys": True})
-
-                json_str = json.dumps(wrapper, **json_kwargs)
-                data = json_str.encode(self.options.encoding)
+            # orjson returns bytes directly
+            data = orjson.dumps(wrapper, option=orjson_options)
 
             return self._compress_data(data)
 
@@ -209,14 +191,9 @@ class JSONSerializer(BaseSerializer[Any]):
             # Decompress if needed
             data = self._decompress_data(data)
 
-            # Parse JSON using orjson or standard json
-            if self.use_orjson:
-                # orjson can handle bytes directly
-                obj = orjson.loads(data)
-            else:
-                # Standard json needs string
-                json_str = data.decode(self.options.encoding)
-                obj = json.loads(json_str)
+            # Parse JSON using orjson
+            # orjson can handle bytes directly
+            obj = orjson.loads(data)
 
             # Extract data if metadata wrapper exists
             if isinstance(obj, dict) and "data" in obj and "metadata" in obj:
@@ -272,9 +249,11 @@ class JSONSerializer(BaseSerializer[Any]):
         if obj is None or isinstance(obj, (bool, int, float, str)):
             return obj
 
-        # Fallback to string representation
-        logger.warning(f"Converting non-serializable object {type(obj)} to string")
-        return {"__string__": str(obj)}
+        # Raise error for non-serializable types
+        raise SerializationError(
+            f"Object of type {type(obj).__name__} is not serializable. "
+            f"Consider adding a custom encoder for this type."
+        )
 
     def _restore_types(self, obj: Any) -> Any:
         """Restore custom types from JSON data."""
@@ -327,8 +306,9 @@ class JSONSerializer(BaseSerializer[Any]):
 
             return cls(**restored_data)
         except Exception as e:
-            logger.warning(f"Failed to restore dataclass: {e}")
-            return data
+            raise DeserializationError(
+                f"Failed to restore dataclass {module_name}.{class_name}: {e}"
+            ) from e
 
     def _restore_enum(self, data: Dict[str, Any]) -> Any:
         """Restore enum from serialized data."""
@@ -345,8 +325,9 @@ class JSONSerializer(BaseSerializer[Any]):
 
             return enum_cls(value)
         except Exception as e:
-            logger.warning(f"Failed to restore enum: {e}")
-            return data
+            raise DeserializationError(
+                f"Failed to restore enum {module_name}.{class_name}: {e}"
+            ) from e
 
 
 class PickleSerializer(BaseSerializer[Any]):

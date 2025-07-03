@@ -136,21 +136,9 @@ class WebSearchTool(BaseTool):
                 html_results = await self._search_duckduckgo_html(params, remaining)
                 results.extend(html_results)
 
-            # If still no results, provide fallback
+            # Return empty results if no search results found
             if not results:
-                results = [
-                    {
-                        "title": f"Search for '{params.query}'",
-                        "url": f"https://duckduckgo.com/?q={quote_plus(params.query)}",
-                        "snippet": (
-                            f"Click to search for '{params.query}' on DuckDuckGo"
-                            if params.include_snippets
-                            else ""
-                        ),
-                        "source": "DuckDuckGo",
-                        "type": "search_link",
-                    }
-                ]
+                return []
 
             return results[: params.max_results]
 

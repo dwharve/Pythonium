@@ -19,7 +19,7 @@ from pydantic import BaseModel
 @pytest.fixture
 def mock_mcp_config():
     """Create a mock MCP configuration."""
-    from pythonium.mcp.config import MCPConfigManager
+    from pythonium.mcp_legacy.config import MCPConfigManager
 
     config = Mock(spec=MCPConfigManager)
     config.server_config = Mock()
@@ -53,7 +53,7 @@ def mock_mcp_config():
 @pytest.fixture
 def mock_session_manager():
     """Create a mock session manager."""
-    from pythonium.mcp.session import SessionManager
+    from pythonium.mcp_legacy.session import SessionManager
 
     session_mgr = Mock(spec=SessionManager)
     session_mgr.sessions = {}
@@ -96,7 +96,7 @@ def mock_security_manager():
 @pytest.fixture
 def sample_mcp_request():
     """Create a sample MCP request for testing."""
-    from pythonium.mcp.protocol import MCPRequest
+    from pythonium.mcp_legacy.protocol import MCPRequest
 
     return MCPRequest(
         id="test-request-1",
@@ -108,7 +108,7 @@ def sample_mcp_request():
 @pytest.fixture
 def sample_mcp_response():
     """Create a sample MCP response for testing."""
-    from pythonium.mcp.protocol import MCPResponse
+    from pythonium.mcp_legacy.protocol import MCPResponse
 
     return MCPResponse(
         id="test-request-1",
@@ -119,7 +119,7 @@ def sample_mcp_response():
 @pytest.fixture
 def sample_mcp_notification():
     """Create a sample MCP notification for testing."""
-    from pythonium.mcp.protocol import MCPNotification
+    from pythonium.mcp_legacy.protocol import MCPNotification
 
     return MCPNotification(
         method="notifications/initialized",

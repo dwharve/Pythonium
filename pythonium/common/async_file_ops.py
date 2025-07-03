@@ -1,23 +1,16 @@
 """
 Async file operations utility module for improved performance.
 
-This module provides high-performance async file operations using aiofiles
-when available, with fallback to synchronous operations. Designed to be a
-drop-in replacement for synchronous file operations in tools.
+This module provides high-performance async file operations using aiofiles.
+Designed to be a drop-in replacement for synchronous file operations in tools.
 """
 
 import asyncio
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
-try:
-    import aiofiles
-    import aiofiles.os
-
-    HAS_AIOFILES = True
-except ImportError:
-    aiofiles = None  # type: ignore[assignment]
-    HAS_AIOFILES = False
+import aiofiles
+import aiofiles.os
 
 from pythonium.common.exceptions import PythoniumError
 from pythonium.common.logging import get_logger
@@ -34,17 +27,8 @@ class AsyncFileError(PythoniumError):
 class AsyncFileService:
     """Service for async file operations with aiofiles integration."""
 
-    def __init__(self, use_aiofiles: bool = True):
-        """Initialize the async file service.
-
-        Args:
-            use_aiofiles: Whether to use aiofiles when available (default: True)
-        """
-        self.use_aiofiles = use_aiofiles and HAS_AIOFILES
-        if self.use_aiofiles:
-            logger.info("AsyncFileService initialized with aiofiles support")
-        else:
-            logger.info("AsyncFileService initialized with sync fallback")
+    def __init__(self):
+        """Initialize the async file service."""
 
     async def read_text(
         self,
@@ -70,11 +54,8 @@ class AsyncFileService:
         try:
             # Check file size if limit specified
             if max_size is not None:
-                if self.use_aiofiles:
-                    stat = await aiofiles.os.stat(file_path)
-                    file_size = stat.st_size
-                else:
-                    file_size = file_path.stat().st_size
+                stat = await aiofiles.os.stat(file_path)
+                file_size = stat.st_size
 
                 if file_size > max_size:
                     raise AsyncFileError(
@@ -82,15 +63,8 @@ class AsyncFileService:
                     )
 
             # Read file content
-            if self.use_aiofiles:
-                async with aiofiles.open(file_path, "r", encoding=encoding) as f:
-                    content: str = await f.read()
-            else:
-                # Fallback to sync operation in thread pool
-                loop = asyncio.get_event_loop()
-                content = await loop.run_in_executor(
-                    None, file_path.read_text, encoding
-                )
+            async with aiofiles.open(file_path, "r", encoding=encoding) as f:
+                content: str = await f.read()
 
             return content
 
@@ -133,38 +107,16 @@ class AsyncFileService:
         try:
             # Create parent directories if needed
             if create_dirs and not file_path.parent.exists():
-                if self.use_aiofiles:
-                    await aiofiles.os.makedirs(file_path.parent, exist_ok=True)
-                else:
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(None, file_path.parent.mkdir, True, True)
+                await aiofiles.os.makedirs(file_path.parent, exist_ok=True)
 
             # Write content to file
             mode = "a" if append else "w"
-            if self.use_aiofiles:
-                async with aiofiles.open(str(file_path), mode=mode, encoding=encoding) as f:  # type: ignore[call-overload]
-                    await f.write(content)
-            else:
-                # Fallback to sync operation in thread pool
-                loop = asyncio.get_event_loop()
-                if append:
-                    await loop.run_in_executor(
-                        None,
-                        lambda: file_path.open("a", encoding=encoding).write(content),
-                    )
-                else:
-                    await loop.run_in_executor(
-                        None, file_path.write_text, content, encoding
-                    )
+            async with aiofiles.open(str(file_path), mode=mode, encoding=encoding) as f:  # type: ignore[call-overload]
+                await f.write(content)
 
             # Get file info
-            if self.use_aiofiles:
-                stat = await aiofiles.os.stat(file_path)
-                file_size = stat.st_size
-            else:
-                loop = asyncio.get_event_loop()
-                stat = await loop.run_in_executor(None, file_path.stat)
-                file_size = stat.st_size
+            stat = await aiofiles.os.stat(file_path)
+            file_size = stat.st_size
 
             return {
                 "path": str(file_path),
@@ -207,32 +159,16 @@ class AsyncFileService:
         try:
             # Create parent directories if needed
             if create_dirs and not dst_path.parent.exists():
-                if self.use_aiofiles:
-                    await aiofiles.os.makedirs(dst_path.parent, exist_ok=True)
-                else:
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(None, dst_path.parent.mkdir, True, True)
+                await aiofiles.os.makedirs(dst_path.parent, exist_ok=True)
 
             # Read source and write to destination
-            if self.use_aiofiles:
-                async with aiofiles.open(src_path, "rb") as src:
-                    async with aiofiles.open(dst_path, "wb") as dst:
-                        await dst.write(await src.read())
-            else:
-                # Fallback to sync operation in thread pool
-                import shutil
-
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, shutil.copy2, src_path, dst_path)
+            async with aiofiles.open(src_path, "rb") as src:
+                async with aiofiles.open(dst_path, "wb") as dst:
+                    await dst.write(await src.read())
 
             # Get file info
-            if self.use_aiofiles:
-                stat = await aiofiles.os.stat(dst_path)
-                file_size = stat.st_size
-            else:
-                loop = asyncio.get_event_loop()
-                stat = await loop.run_in_executor(None, dst_path.stat)
-                file_size = stat.st_size
+            stat = await aiofiles.os.stat(dst_path)
+            file_size = stat.st_size
 
             return {
                 "src_path": str(src_path),
@@ -268,30 +204,17 @@ class AsyncFileService:
 
         try:
             # Check if file exists
-            if self.use_aiofiles:
-                try:
-                    stat = await aiofiles.os.stat(file_path)
-                    file_size = stat.st_size
-                    existed = True
-                except FileNotFoundError:
-                    if missing_ok:
-                        return {"path": str(file_path), "existed": False}
-                    raise AsyncFileError(f"File not found: {file_path}")
-            else:
-                if file_path.exists():
-                    file_size = file_path.stat().st_size
-                    existed = True
-                elif missing_ok:
+            try:
+                stat = await aiofiles.os.stat(file_path)
+                file_size = stat.st_size
+                existed = True
+            except FileNotFoundError:
+                if missing_ok:
                     return {"path": str(file_path), "existed": False}
-                else:
-                    raise AsyncFileError(f"File not found: {file_path}")
+                raise AsyncFileError(f"File not found: {file_path}")
 
             # Delete the file
-            if self.use_aiofiles:
-                await aiofiles.os.remove(file_path)
-            else:
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, file_path.unlink)
+            await aiofiles.os.remove(file_path)
 
             return {
                 "path": str(file_path),
@@ -319,11 +242,7 @@ class AsyncFileService:
         file_path = Path(file_path)
 
         try:
-            if self.use_aiofiles:
-                stat = await aiofiles.os.stat(file_path)
-            else:
-                loop = asyncio.get_event_loop()
-                stat = await loop.run_in_executor(None, file_path.stat)
+            stat = await aiofiles.os.stat(file_path)
 
             return {
                 "path": str(file_path),

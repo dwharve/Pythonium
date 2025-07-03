@@ -12,17 +12,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
-# Optional watchdog imports
-try:
-    from watchdog.events import FileSystemEventHandler
-    from watchdog.observers import Observer
+# Watchdog imports (required for file watching)
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
-    ObserverType = Observer
-    WATCHDOG_AVAILABLE = True
-except ImportError:
-    WATCHDOG_AVAILABLE = False
-    ObserverType = None  # type: ignore
-    FileSystemEventHandler = object  # type: ignore
+ObserverType = Observer
 
 from pythonium.common.base import Result
 from pythonium.common.config import get_settings
@@ -51,7 +45,6 @@ class ConfigurationSource:
 
 
 @dataclass
-@dataclass
 class ConfigurationChange:
     """Configuration change notification."""
 
@@ -74,7 +67,7 @@ class ConfigurationWatcher(FileSystemEventHandler):
 
     def on_modified(self, event):
         if not event.is_directory:
-            file_path = Path(event.src_path)
+            file_path = Path(str(event.src_path))
 
             # Check if this is a configuration file we're watching
             if self.config_manager._is_watched_file(file_path):
@@ -223,15 +216,8 @@ class ConfigurationManager(BaseManager):
 
     async def _setup_file_watching(self) -> None:
         """Set up file system watching for configuration files."""
-        if not WATCHDOG_AVAILABLE:
-            logger.warning("watchdog package not available, file watching disabled")
-            return
-
         try:
             self._fs_handler = ConfigurationWatcher(self)
-            assert (
-                ObserverType is not None
-            ), "ObserverType should not be None when WATCHDOG_AVAILABLE is True"
             self._fs_observer = ObserverType()
 
             # Watch directories containing configuration files
@@ -281,8 +267,9 @@ class ConfigurationManager(BaseManager):
         elif ext == ".json":
             format = SerializationFormat.JSON
         elif ext == ".toml":
-            # Note: Would need to add TOML support to serialization module
-            format = SerializationFormat.JSON  # Fallback for now
+            raise ConfigurationError(
+                f"TOML format is not supported. Please convert {file_path} to YAML or JSON format."
+            )
         else:
             raise ConfigurationError(f"Unsupported configuration format: {ext}")
 

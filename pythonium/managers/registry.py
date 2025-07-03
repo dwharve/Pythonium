@@ -99,30 +99,23 @@ class ManagerRegistry(BaseComponent):
             import inspect
 
             # Check if constructor accepts a name parameter
-            try:
-                sig = inspect.signature(manager_type.__init__)
-                params = list(sig.parameters.keys())
+            sig = inspect.signature(manager_type.__init__)
+            params = list(sig.parameters.keys())
 
-                # If the constructor is overridden and doesn't accept 'name' parameter
-                if len(params) == 1 and params[0] == "self":  # Only self parameter
+            # If the constructor is overridden and doesn't accept 'name' parameter
+            if len(params) == 1 and params[0] == "self":  # Only self parameter
 
-                    def _create_manager_no_args():
-                        # For managers that override __init__ and don't take name parameter
-                        return manager_type()  # type: ignore[call-arg]
+                def _create_manager_no_args():
+                    # For managers that override __init__ and don't take name parameter
+                    return manager_type()  # type: ignore[call-arg]
 
-                    factory = _create_manager_no_args
-                else:  # Constructor accepts name parameter (BaseManager default)
+                factory = _create_manager_no_args
+            else:  # Constructor accepts name parameter (BaseManager default)
 
-                    def _create_manager_with_name():
-                        return manager_type(name)
-
-                    factory = _create_manager_with_name
-            except Exception:
-                # Fallback to constructor with name for BaseManager compatibility
-                def _create_manager_fallback():
+                def _create_manager_with_name():
                     return manager_type(name)
 
-                factory = _create_manager_fallback
+                factory = _create_manager_with_name
 
         registration = ManagerRegistration(
             manager_type=manager_type,

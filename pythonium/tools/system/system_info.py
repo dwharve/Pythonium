@@ -94,45 +94,39 @@ class SystemInfoTool(BaseTool):
 
     def _get_hardware_info(self) -> Dict[str, Any]:
         """Get hardware information using psutil."""
-        try:
-            import psutil
+        import psutil
 
-            # CPU information
-            cpu_info = {
-                "physical_cores": psutil.cpu_count(logical=False),
-                "logical_cores": psutil.cpu_count(logical=True),
-                "cpu_percent": psutil.cpu_percent(interval=1),
-                "cpu_freq": (
-                    psutil.cpu_freq()._asdict() if psutil.cpu_freq() else None
-                ),
-            }
+        # CPU information
+        cpu_info = {
+            "physical_cores": psutil.cpu_count(logical=False),
+            "logical_cores": psutil.cpu_count(logical=True),
+            "cpu_percent": psutil.cpu_percent(interval=1),
+            "cpu_freq": (psutil.cpu_freq()._asdict() if psutil.cpu_freq() else None),
+        }
 
-            # Memory information
-            memory = psutil.virtual_memory()
-            memory_info = {
-                "total": memory.total,
-                "available": memory.available,
-                "used": memory.used,
-                "percent": memory.percent,
-            }
+        # Memory information
+        memory = psutil.virtual_memory()
+        memory_info = {
+            "total": memory.total,
+            "available": memory.available,
+            "used": memory.used,
+            "percent": memory.percent,
+        }
 
-            # Disk information
-            disk = psutil.disk_usage("/")
-            disk_info = {
-                "total": disk.total,
-                "used": disk.used,
-                "free": disk.free,
-                "percent": (disk.used / disk.total) * 100,
-            }
+        # Disk information
+        disk = psutil.disk_usage("/")
+        disk_info = {
+            "total": disk.total,
+            "used": disk.used,
+            "free": disk.free,
+            "percent": (disk.used / disk.total) * 100,
+        }
 
-            return {
-                "cpu": cpu_info,
-                "memory": memory_info,
-                "disk": disk_info,
-            }
-
-        except ImportError:
-            return {"error": "psutil not available for detailed hardware info"}
+        return {
+            "cpu": cpu_info,
+            "memory": memory_info,
+            "disk": disk_info,
+        }
 
     def _get_network_info(self) -> Dict[str, Any]:
         """Get network information."""
@@ -146,26 +140,23 @@ class SystemInfoTool(BaseTool):
                 "fqdn": socket.getfqdn(),
             }
 
-            # Try to get additional network interfaces
-            try:
-                import psutil
+            # Get additional network interfaces
+            import psutil
 
-                interfaces = {}
-                for interface, addrs in psutil.net_if_addrs().items():
-                    interface_info = []
-                    for addr in addrs:
-                        interface_info.append(
-                            {
-                                "family": str(addr.family),
-                                "address": addr.address,
-                                "netmask": addr.netmask,
-                                "broadcast": addr.broadcast,
-                            }
-                        )
-                    interfaces[interface] = interface_info
-                network_info["interfaces"] = interfaces
-            except ImportError:
-                pass
+            interfaces = {}
+            for interface, addrs in psutil.net_if_addrs().items():
+                interface_info = []
+                for addr in addrs:
+                    interface_info.append(
+                        {
+                            "family": str(addr.family),
+                            "address": addr.address,
+                            "netmask": addr.netmask,
+                            "broadcast": addr.broadcast,
+                        }
+                    )
+                interfaces[interface] = interface_info
+            network_info["interfaces"] = interfaces
 
             return network_info
 
@@ -295,50 +286,12 @@ class DiskUsageTool(BaseTool):
             ),
         }
 
-    def _get_disk_usage_statvfs(
-        self, path: str, human_readable: bool
-    ) -> Dict[str, Any]:
-        """Get disk usage using os.statvfs (Unix fallback)."""
-        statvfs = os.statvfs(path)
-        total = statvfs.f_frsize * statvfs.f_blocks
-        # Use f_bavail if f_available is not available
-        available_blocks = getattr(statvfs, "f_available", statvfs.f_bavail)
-        free = statvfs.f_frsize * available_blocks
-        used = total - free
-
-        return {
-            "path": os.path.abspath(path),
-            "total": self._format_bytes(total, human_readable),
-            "used": self._format_bytes(used, human_readable),
-            "free": self._format_bytes(free, human_readable),
-            "percent": (round((used / total) * 100, 2) if total > 0 else 0),
-            "raw_bytes": (
-                {
-                    "total": total,
-                    "used": used,
-                    "free": free,
-                }
-                if not human_readable
-                else None
-            ),
-        }
-
     def _get_path_disk_usage(self, path: str, human_readable: bool) -> Dict[str, Any]:
         """Get disk usage for a single path."""
         if not os.path.exists(path):
             return {"path": path, "error": "Path does not exist"}
 
-        try:
-            return self._get_disk_usage_psutil(path, human_readable)
-        except ImportError:
-            # Fallback to os.statvfs on Unix systems
-            if hasattr(os, "statvfs"):
-                return self._get_disk_usage_statvfs(path, human_readable)
-            else:
-                return {
-                    "path": os.path.abspath(path),
-                    "error": "Disk usage information not available on this platform",
-                }
+        return self._get_disk_usage_psutil(path, human_readable)
 
     async def execute(
         self, parameters: Dict[str, Any], context: ToolContext
@@ -484,51 +437,47 @@ class NetworkInfoTool(BaseTool):
 
     def _get_detailed_network_info(self) -> Dict[str, Any]:
         """Get detailed network information using psutil."""
-        try:
-            import psutil
+        import psutil
 
-            network_info = {}
+        network_info = {}
 
-            # Network interfaces
-            interfaces = {}
-            for interface, addrs in psutil.net_if_addrs().items():
-                interface_info: Dict[str, Any] = {
-                    "addresses": [],
-                    "is_up": interface in psutil.net_if_stats()
-                    and psutil.net_if_stats()[interface].isup,
-                }
-
-                for addr in addrs:
-                    interface_info["addresses"].append(
-                        {
-                            "family": str(addr.family),
-                            "address": addr.address,
-                            "netmask": addr.netmask,
-                            "broadcast": addr.broadcast,
-                        }
-                    )
-
-                interfaces[interface] = interface_info
-
-            network_info["interfaces"] = interfaces
-
-            # Network I/O statistics
-            net_io = psutil.net_io_counters()
-            network_info["io_stats"] = {
-                "bytes_sent": net_io.bytes_sent,
-                "bytes_recv": net_io.bytes_recv,
-                "packets_sent": net_io.packets_sent,
-                "packets_recv": net_io.packets_recv,
-                "errin": net_io.errin,
-                "errout": net_io.errout,
-                "dropin": net_io.dropin,
-                "dropout": net_io.dropout,
+        # Network interfaces
+        interfaces = {}
+        for interface, addrs in psutil.net_if_addrs().items():
+            interface_info: Dict[str, Any] = {
+                "addresses": [],
+                "is_up": interface in psutil.net_if_stats()
+                and psutil.net_if_stats()[interface].isup,
             }
 
-            return network_info
+            for addr in addrs:
+                interface_info["addresses"].append(
+                    {
+                        "family": str(addr.family),
+                        "address": addr.address,
+                        "netmask": addr.netmask,
+                        "broadcast": addr.broadcast,
+                    }
+                )
 
-        except ImportError:
-            return {"interfaces": {"note": "Detailed interface info requires psutil"}}
+            interfaces[interface] = interface_info
+
+        network_info["interfaces"] = interfaces
+
+        # Network I/O statistics
+        net_io = psutil.net_io_counters()
+        network_info["io_stats"] = {
+            "bytes_sent": net_io.bytes_sent,
+            "bytes_recv": net_io.bytes_recv,
+            "packets_sent": net_io.packets_sent,
+            "packets_recv": net_io.packets_recv,
+            "errin": net_io.errin,
+            "errout": net_io.errout,
+            "dropin": net_io.dropin,
+            "dropout": net_io.dropout,
+        }
+
+        return network_info
 
     async def execute(
         self, parameters: Dict[str, Any], context: ToolContext

@@ -13,9 +13,9 @@ from unittest.mock import AsyncMock, Mock, patch
 import psutil
 import pytest
 
-from pythonium.mcp.config import MCPConfigManager
-from pythonium.mcp.protocol import MCPRequest, MCPResponse
-from pythonium.mcp.server import MCPServer
+from pythonium.mcp_legacy.config import MCPConfigManager
+from pythonium.mcp_legacy.protocol import MCPRequest, MCPResponse
+from pythonium.mcp_legacy.legacy_server import MCPServer
 
 
 class TestMCPServerPerformance:

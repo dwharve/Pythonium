@@ -10,7 +10,7 @@ from typing import Any, Dict
 
 import pytest
 
-from pythonium.mcp.protocol import (  # Core protocol types; Result types; Content types; Error types; Other types
+from pythonium.mcp_legacy.protocol import (  # Core protocol types; Result types; Content types; Error types; Other types
     Annotations,
     AudioContent,
     ClientCapabilities,
@@ -168,7 +168,7 @@ class TestMCPContentTypes:
 
     def test_embedded_resource_creation(self):
         """Test EmbeddedResource creation."""
-        from pythonium.mcp.protocol import TextResourceContents
+        from pythonium.mcp_legacy.protocol import TextResourceContents
 
         resource_contents = TextResourceContents(
             uri="file:///test.txt", text="File contents", mimeType="text/plain"

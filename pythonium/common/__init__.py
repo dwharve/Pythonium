@@ -92,7 +92,6 @@ from pythonium.common.filesystem import (
 )
 from pythonium.common.logging import (
     LogFormat,
-    LogLevel,
     audit_log,
     get_logger,
     performance_log,
@@ -200,7 +199,6 @@ __all__ = [
     # Logging
     "get_logger",
     "setup_logging",
-    "LogLevel",
     "LogFormat",
     "audit_log",
     "performance_log",

@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from pythonium.mcp.config import MCPConfigManager, TransportType
-from pythonium.mcp.protocol import (
+from pythonium.mcp_legacy.config import MCPConfigManager, TransportType
+from pythonium.mcp_legacy.protocol import (
     InitializeResult,
     MCPNotification,
     MCPRequest,
@@ -22,9 +22,9 @@ from pythonium.mcp.protocol import (
     MessageType,
     ServerCapabilities,
 )
-from pythonium.mcp.server import MCPServer, MCPServerError
-from pythonium.mcp.session import ConnectionType, SessionManager
-from pythonium.mcp.transport import StdioTransport, WebSocketTransport
+from pythonium.mcp_legacy.legacy_server import MCPServer, MCPServerError
+from pythonium.mcp_legacy.session import ConnectionType, SessionManager
+from pythonium.mcp_legacy.transport import StdioTransport, WebSocketTransport
 
 
 class TestMCPServerIntegration:

@@ -9,26 +9,26 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from pythonium.mcp import config, handlers, protocol, server
-from pythonium.mcp import session as mcp_session
-from pythonium.mcp import transport as mcp_transport
-from pythonium.mcp.config import (
+from pythonium.mcp_legacy import config, handlers, protocol, server
+from pythonium.mcp_legacy import session as mcp_session
+from pythonium.mcp_legacy import transport as mcp_transport
+from pythonium.mcp_legacy.config import (
     LoggingConfig,
     PerformanceConfig,
     SecurityConfig,
     ServerConfig,
     TransportConfig,
 )
-from pythonium.mcp.handlers import MCPMessageHandler
-from pythonium.mcp.protocol import (
+from pythonium.mcp_legacy.handlers import MCPMessageHandler
+from pythonium.mcp_legacy.protocol import (
     MCPError,
     MCPMessage,
     MCPRequest,
     MCPResponse,
 )
-from pythonium.mcp.server import MCPServer
-from pythonium.mcp.session import ConnectionType, SessionManager
-from pythonium.mcp.transport import (
+from pythonium.mcp_legacy.legacy_server import MCPServer
+from pythonium.mcp_legacy.session import ConnectionType, SessionManager
+from pythonium.mcp_legacy.transport import (
     HttpTransport,
     StdioTransport,
     WebSocketTransport,
@@ -52,7 +52,7 @@ class TestMCPPackage(BaseTestCase):
 
     def test_package_version(self):
         """Test that the package has a version."""
-        from pythonium.mcp import __version__
+        from pythonium.mcp_legacy import __version__
 
         assert __version__ == "0.1.2"
 
@@ -227,7 +227,7 @@ class TestMCPHandlers(BaseTestCase):
     def setup_handler_test(self):
         """Set up test fixtures."""
         # Create dependencies
-        from pythonium.mcp.config import MCPConfigManager
+        from pythonium.mcp_legacy.config import MCPConfigManager
 
         self.config_manager = MCPConfigManager()
         self.session_manager = SessionManager()
@@ -239,7 +239,7 @@ class TestMCPHandlers(BaseTestCase):
     @pytest.mark.asyncio
     async def test_initialize_handler(self):
         """Test initialize message handling."""
-        from pythonium.mcp.protocol import ClientCapabilities, InitializeParams
+        from pythonium.mcp_legacy.protocol import ClientCapabilities, InitializeParams
 
         # Create a session first
         session_id = await self.session_manager.create_session(ConnectionType.STDIO)

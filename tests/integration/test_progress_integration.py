@@ -9,8 +9,8 @@ import pytest
 
 from pythonium.managers.tools.pipeline import ExecutionPipeline
 from pythonium.managers.tools.registry import ToolRegistry
-from pythonium.mcp.handlers import MCPMessageHandler
-from pythonium.mcp.protocol import MCPRequest
+from pythonium.mcp_legacy.handlers import MCPMessageHandler
+from pythonium.mcp_legacy.protocol import MCPRequest
 from pythonium.tools.filesystem.search import FindFilesTool
 
 

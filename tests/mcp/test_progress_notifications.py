@@ -8,10 +8,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pythonium.mcp.config import MCPConfigManager
-from pythonium.mcp.handlers import MCPMessageHandler
-from pythonium.mcp.protocol import MCPNotification, MCPRequest, MCPResponse
-from pythonium.mcp.session import SessionManager
+from pythonium.mcp_legacy.config import MCPConfigManager
+from pythonium.mcp_legacy.handlers import MCPMessageHandler
+from pythonium.mcp_legacy.protocol import MCPNotification, MCPRequest, MCPResponse
+from pythonium.mcp_legacy.session import SessionManager
 
 
 class MockTransport:

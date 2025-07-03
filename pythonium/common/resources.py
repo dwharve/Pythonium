@@ -442,11 +442,27 @@ class ResourceManager(BaseComponent):
 @contextmanager
 def managed_resource(resource: Resource[T]) -> Generator[T, None, None]:
     """Context manager for resource acquisition and release."""
+
+    def run_async(coro):
+        """Run async code, handling existing event loop."""
+        try:
+            return asyncio.run(coro)
+        except RuntimeError as e:
+            if "cannot be called from a running event loop" in str(e):
+                # There's already an event loop running, run in a new thread
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, coro)
+                    return future.result()
+            else:
+                raise
+
     try:
-        value = asyncio.run(resource.acquire())
+        value = run_async(resource.acquire())
         yield value
     finally:
-        asyncio.run(resource.release())
+        run_async(resource.release())
 
 
 @asynccontextmanager

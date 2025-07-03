@@ -184,8 +184,8 @@ class ServiceStatusTool(BaseTool):
             service_info["enabled"] = enabled_status == "enabled"
 
         except FileNotFoundError:
-            # Fallback to service command
-            self._check_linux_service_fallback(service, service_info)
+            service_info["status"] = "command_not_found"
+            service_info["error"] = "systemctl command not available"
         except subprocess.TimeoutExpired:
             service_info["status"] = "timeout"
             service_info["error"] = "Command timed out"
@@ -194,34 +194,6 @@ class ServiceStatusTool(BaseTool):
             service_info["error"] = str(e)
 
         return service_info
-
-    def _check_linux_service_fallback(
-        self, service: str, service_info: Dict[str, Any]
-    ) -> None:
-        """Fallback Linux service check using service command."""
-        import subprocess
-
-        try:
-            result = subprocess.run(
-                ["service", service, "status"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-
-            if result.returncode == 0:
-                output = result.stdout.lower()
-                if "running" in output or "active" in output:
-                    service_info["status"] = "running"
-                    service_info["running"] = True
-                else:
-                    service_info["status"] = "stopped"
-            else:
-                service_info["status"] = "unknown"
-                service_info["error"] = result.stderr.strip()
-        except FileNotFoundError:
-            service_info["status"] = "command_not_found"
-            service_info["error"] = "Neither systemctl nor service command available"
 
     def _check_darwin_service(self, service: str) -> Dict[str, Any]:
         """Check macOS service using launchctl."""
@@ -304,7 +276,7 @@ class ServiceStatusTool(BaseTool):
             process = psutil.Process(service_info["pid"])
             service_info["memory_usage"] = process.memory_info().rss
             service_info["cpu_usage"] = process.cpu_percent()
-        except (ImportError, psutil.NoSuchProcess):
+        except psutil.NoSuchProcess:
             pass
 
     def _check_single_service(self, service: str, platform: str) -> Dict[str, Any]:
@@ -711,33 +683,22 @@ class SystemLoadTool(BaseTool):
 
             load_info = self._initialize_load_info()
 
-            try:
-                import psutil
+            import psutil
 
-                self._collect_cpu_info(psutil, load_info)
-                self._collect_memory_info(psutil, load_info)
-                self._collect_disk_info(psutil, load_info)
-                self._collect_uptime_info(psutil, load_info)
-                self._collect_load_average(load_info)
+            self._collect_cpu_info(psutil, load_info)
+            self._collect_memory_info(psutil, load_info)
+            self._collect_disk_info(psutil, load_info)
+            self._collect_uptime_info(psutil, load_info)
+            self._collect_load_average(load_info)
 
-                # Process information
-                if include_processes:
-                    processes = self._collect_processes_info(
-                        psutil, sort_by, process_limit
-                    )
-                    load_info["processes"] = {
-                        "top_processes": processes[:process_limit],
-                        "total_count": len(processes),
-                        "sort_by": sort_by,
-                    }
-
-            except ImportError:
-                load_info["error"] = (
-                    "psutil not available for detailed system monitoring"
-                )
-
-                # Fallback to basic system information
-                self._collect_load_average(load_info)
+            # Process information
+            if include_processes:
+                processes = self._collect_processes_info(psutil, sort_by, process_limit)
+                load_info["processes"] = {
+                    "top_processes": processes[:process_limit],
+                    "total_count": len(processes),
+                    "sort_by": sort_by,
+                }
 
             return Result[Any].success_result(data=load_info)
 

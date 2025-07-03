@@ -28,10 +28,9 @@ from pythonium.managers import (
     ResourceManager,
     SecurityManager,
 )
-from pythonium.mcp import (
+from pythonium.mcp_server import (
     MCPConfigManager,
-    MCPProtocol,
-    MCPServer,
+    PythoniumMCPServer,
     ServerConfig,
 )
 from pythonium.tools import (
@@ -62,8 +61,7 @@ __all__ = [
     "ResourceManager",
     "SecurityManager",
     # MCP
-    "MCPServer",
-    "MCPProtocol",
+    "PythoniumMCPServer",
     "ServerConfig",
     "MCPConfigManager",
     # Tools

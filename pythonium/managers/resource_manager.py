@@ -355,13 +355,16 @@ class ResourceManager(BaseManager):
             self._limits.max_memory = int(available_memory * 0.8)
 
         if not self._limits.max_open_files:
-            try:
-                import resource
+            import resource
 
+            try:
                 soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
                 self._limits.max_open_files = int(soft_limit * 0.9)
-            except (ImportError, OSError):
-                self._limits.max_open_files = 1000  # Fallback
+            except OSError as e:
+                raise ResourceError(
+                    f"Failed to get file descriptor limit: {e}. "
+                    "Please configure max_open_files explicitly in your configuration."
+                ) from e
 
     async def _start(self) -> None:
         """Start the resource manager."""

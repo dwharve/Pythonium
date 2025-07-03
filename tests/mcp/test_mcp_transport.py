@@ -14,10 +14,10 @@ import pytest
 from aiohttp.web import Request, Response
 from aiohttp.web_ws import WebSocketResponse
 
-from pythonium.mcp.config import TransportConfig, TransportType
-from pythonium.mcp.protocol import MCPNotification, MCPRequest, MCPResponse
-from pythonium.mcp.session import SessionManager
-from pythonium.mcp.transport import (
+from pythonium.mcp_legacy.config import TransportConfig, TransportType
+from pythonium.mcp_legacy.protocol import MCPNotification, MCPRequest, MCPResponse
+from pythonium.mcp_legacy.session import SessionManager
+from pythonium.mcp_legacy.transport import (
     HttpTransport,
     StdioTransport,
     Transport,

@@ -18,7 +18,7 @@ from rich.console import Console
 __version__ = importlib.metadata.version("pythonium")
 
 from .common.logging import get_logger, setup_logging
-from .mcp.server import MCPServer
+from .mcp_server import PythoniumMCPServer
 
 console = Console()
 logger = get_logger(__name__)
@@ -91,15 +91,16 @@ def serve(ctx, host: str, port: int, transport: str):
     logger.info(f"Port: {port}")
 
     try:
-        # Create transport configuration overrides
-        transport_config_overrides = {
-            "transport": {"type": transport, "host": host, "port": port}
+        # Create configuration overrides including logging level
+        config_overrides = {
+            "transport": {"type": transport, "host": host, "port": port},
+            "logging": {"level": log_level.lower()},
         }
 
         # Create and start server with config overrides
-        server = MCPServer(
+        server = PythoniumMCPServer(
             config_file=config_path,
-            config_overrides=transport_config_overrides,
+            config_overrides=config_overrides,
         )
 
         # Use the generic run method
@@ -123,29 +124,11 @@ def _auto_detect_python_path(python_path: Optional[str]) -> str:
 def _auto_detect_pythonium_path(pythonium_path: Optional[str], python_path: str) -> str:
     """Auto-detect pythonium path if not provided."""
     if not pythonium_path:
-        try:
-            # Try to find pythonium module
-            import pythonium
+        # Try to find pythonium module
+        import pythonium
 
-            pythonium_path = str(Path(pythonium.__file__).parent.parent)
-            logger.debug(f"Auto-detected pythonium path: {pythonium_path}")
-        except ImportError:
-            # Try to find it via command line
-            try:
-                result = subprocess.run(
-                    [python_path, "-c", "import pythonium; print(pythonium.__file__)"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                pythonium_file = result.stdout.strip()
-                pythonium_path = str(Path(pythonium_file).parent.parent)
-                logger.debug(f"Found pythonium via subprocess: {pythonium_path}")
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                logger.error(
-                    "Could not auto-detect pythonium path. Please specify --pythonium-path"
-                )
-                sys.exit(1)
+        pythonium_path = str(Path(pythonium.__file__).parent.parent)
+        logger.debug(f"Auto-detected pythonium path: {pythonium_path}")
     return pythonium_path
 
 
