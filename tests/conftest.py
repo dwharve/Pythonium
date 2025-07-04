@@ -15,57 +15,6 @@ import pytest
 from pydantic import BaseModel
 
 
-# MCP-specific test fixtures and utilities
-@pytest.fixture
-def mock_mcp_config():
-    """Create a mock MCP configuration."""
-    from pythonium.mcp_legacy.config import MCPConfigManager
-
-    config = Mock(spec=MCPConfigManager)
-    config.server_config = Mock()
-    config.server_config.name = "test-server"
-    config.server_config.version = "1.0.0"
-    config.server_config.description = "Test MCP server"
-
-    config.transport_config = Mock()
-    config.transport_config.type = "stdio"
-    config.transport_config.timeout = 30
-
-    config.security_config = Mock()
-    config.security_config.enabled = True
-    config.security_config.max_request_size = 1024000
-
-    config.logging_config = Mock()
-    config.logging_config.level = "INFO"
-
-    config.performance_config = Mock()
-    config.performance_config.enabled = True
-    config.performance_config.max_concurrent_requests = 100
-
-    config.session_config = Mock()
-    config.session_config.timeout = 3600
-    config.session_config.max_sessions = 100
-    config.session_config.cleanup_interval = 300
-
-    return config
-
-
-@pytest.fixture
-def mock_session_manager():
-    """Create a mock session manager."""
-    from pythonium.mcp_legacy.session import SessionManager
-
-    session_mgr = Mock(spec=SessionManager)
-    session_mgr.sessions = {}
-    session_mgr.create_session = Mock(return_value="test-session-id")
-    session_mgr.get_session = Mock()
-    session_mgr.remove_session = Mock(return_value=True)
-    session_mgr.get_session_count = Mock(return_value=0)
-    session_mgr.cleanup_expired_sessions = Mock(return_value=0)
-
-    return session_mgr
-
-
 @pytest.fixture
 def mock_tool_registry():
     """Create a mock tool registry."""
@@ -91,40 +40,6 @@ def mock_security_manager():
     security.sanitize_input = Mock(side_effect=lambda x: x)
 
     return security
-
-
-@pytest.fixture
-def sample_mcp_request():
-    """Create a sample MCP request for testing."""
-    from pythonium.mcp_legacy.protocol import MCPRequest
-
-    return MCPRequest(
-        id="test-request-1",
-        method="ping",
-        params={},
-    )
-
-
-@pytest.fixture
-def sample_mcp_response():
-    """Create a sample MCP response for testing."""
-    from pythonium.mcp_legacy.protocol import MCPResponse
-
-    return MCPResponse(
-        id="test-request-1",
-        result={"status": "ok"},
-    )
-
-
-@pytest.fixture
-def sample_mcp_notification():
-    """Create a sample MCP notification for testing."""
-    from pythonium.mcp_legacy.protocol import MCPNotification
-
-    return MCPNotification(
-        method="notifications/initialized",
-        params={},
-    )
 
 
 @pytest.fixture

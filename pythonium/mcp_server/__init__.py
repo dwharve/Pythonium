@@ -23,5 +23,5 @@ __all__ = [
     "TransportConfig",
     "SecurityConfig",
     "MCPConfigManager",
-    "PythoniumMCPServer"
+    "PythoniumMCPServer",
 ]

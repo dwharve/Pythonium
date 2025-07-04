@@ -16,14 +16,14 @@ from typing import Any, Callable, Dict, List, Optional, Set, Union
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-ObserverType = Observer
-
 from pythonium.common.base import Result
 from pythonium.common.config import get_settings
 from pythonium.common.exceptions import ConfigurationError
 from pythonium.common.logging import get_logger
 from pythonium.common.serialization import SerializationFormat
 from pythonium.managers.base import BaseManager, ManagerPriority
+
+ObserverType = Observer
 
 logger = get_logger(__name__)
 

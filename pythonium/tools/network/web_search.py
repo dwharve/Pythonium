@@ -1,7 +1,6 @@
 """Web search tool for performing searches using various search engines."""
 
 from typing import Any, Dict, List
-from urllib.parse import quote_plus
 
 from pythonium.common.base import Result
 from pythonium.common.error_handling import handle_tool_error

@@ -141,11 +141,10 @@ class AsyncFileUtils:
                         f"Parent directory does not exist: {file_path.parent}"
                     )
 
-            # Determine write mode
-            mode = "a" if append else "w"
-
             # Write content
-            async with aiofiles.open(str(file_path), mode=mode, encoding=encoding) as f:
+            async with aiofiles.open(
+                str(file_path), mode="a" if append else "w", encoding=encoding
+            ) as f:
                 await f.write(content)
 
             # Get file stats
@@ -263,11 +262,10 @@ class AsyncFileUtils:
                         f"Parent directory does not exist: {file_path.parent}"
                     )
 
-            # Determine write mode
-            mode = "ab" if append else "wb"
-
             # Write content
-            async with aiofiles.open(str(file_path), mode=mode) as f:
+            async with aiofiles.open(
+                str(file_path), mode="ab" if append else "wb"
+            ) as f:
                 await f.write(content)
 
             # Get file stats

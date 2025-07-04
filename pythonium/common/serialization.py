@@ -7,7 +7,6 @@ including JSON, YAML, MessagePack, and custom binary formats.
 
 import base64
 import gzip
-import json
 import pickle
 import uuid
 from abc import ABC, abstractmethod

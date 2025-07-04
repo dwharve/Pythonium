@@ -256,7 +256,7 @@ class PythoniumMCPServer:
         # Set function attributes
         tool_function.__name__ = tool_instance.metadata.name
         tool_function.__doc__ = tool_instance.metadata.description
-        tool_function.__signature__ = sig
+        tool_function.__signature__ = sig  # type: ignore
         tool_function.__annotations__ = annotations
 
         return tool_function

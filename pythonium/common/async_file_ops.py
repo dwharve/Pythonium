@@ -5,7 +5,6 @@ This module provides high-performance async file operations using aiofiles.
 Designed to be a drop-in replacement for synchronous file operations in tools.
 """
 
-import asyncio
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
