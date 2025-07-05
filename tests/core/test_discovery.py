@@ -363,3 +363,37 @@ class TestToolDiscoveryManager:
             # So we expect it to raise
             with pytest.raises(Exception, match="Test error"):
                 manager.discover_tools()
+
+    def test_real_discovery(self, tmp_path):
+        """Integration test for discovering actual modules."""
+        pkg = tmp_path / "pkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(
+            "from pythonium.tools.base import BaseTool, ToolMetadata\n"
+            "class PackageTool(BaseTool):\n"
+            "    @property\n"
+            "    def metadata(self):\n"
+            "        return ToolMetadata(name='pkg_tool', description='d', category='test')\n"
+            "    async def execute(self, params, context):\n"
+            "        return {}\n"
+        )
+
+        mod_file = tmp_path / "mod.py"
+        mod_file.write_text(
+            "from pythonium.tools.base import BaseTool, ToolMetadata\n"
+            "class ModTool(BaseTool):\n"
+            "    @property\n"
+            "    def metadata(self):\n"
+            "        return ToolMetadata(name='mod_tool', description='d', category='test')\n"
+            "    async def execute(self, params, context):\n"
+            "        return {}\n"
+        )
+
+        manager = ToolDiscoveryManager()
+        manager.add_search_path(tmp_path)
+        discovered = manager.discover_tools()
+        # tool names use class names as keys
+        assert "PackageTool" in discovered
+        assert "ModTool" in discovered
+        report = manager.export_discovery_report()
+        assert report["total_tools"] >= 2
