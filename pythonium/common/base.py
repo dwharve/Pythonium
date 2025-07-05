@@ -9,7 +9,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Dict, Generic, Optional, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -96,48 +96,6 @@ class BaseComponent(ABC):
         }
 
 
-class ConfigurableComponent(BaseComponent):
-    """Base class for components that need configuration validation."""
-
-    @abstractmethod
-    def get_config_schema(self) -> type[BaseModel]:
-        """Get the configuration schema for this component."""
-        pass
-
-    def validate_config(self) -> None:
-        """Validate the component configuration."""
-        schema = self.get_config_schema()
-        try:
-            schema(**self.config)
-        except Exception as e:
-            raise ValueError(f"Invalid configuration for {self.name}: {e}")
-
-
-class AsyncIterable(ABC):
-    """Base class for async iterable components."""
-
-    @abstractmethod
-    async def __aiter__(self):
-        """Return async iterator."""
-        pass
-
-    @abstractmethod
-    async def __anext__(self):
-        """Return next item."""
-        pass
-
-
-class Singleton(type):
-    """Singleton metaclass for ensuring single instances."""
-
-    _instances: Dict[type, Any] = {}
-
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            cls._instances[cls] = super().__call__(*args, **kwargs)
-        return cls._instances[cls]
-
-
 class Result(BaseModel, Generic[T]):
     """Generic result container with type safety."""
 
@@ -212,66 +170,3 @@ class Result(BaseModel, Generic[T]):
         if self.data is None:
             raise RuntimeError("Result success but data is None")
         return self.data
-
-
-class EventHandler(ABC):
-    """Base class for event handlers."""
-
-    @abstractmethod
-    async def handle(self, event: Dict[str, Any]) -> None:
-        """Handle an event."""
-        pass
-
-
-class Provider(ABC):
-    """Base class for providers."""
-
-    @abstractmethod
-    async def provide(self, identifier: str) -> Any:
-        """Provide a resource or service."""
-        pass
-
-    @abstractmethod
-    async def can_provide(self, identifier: str) -> bool:
-        """Check if this provider can handle the identifier."""
-        pass
-
-
-class Registry:
-    """Generic registry for managing collections of items."""
-
-    def __init__(self):
-        self._items: Dict[str, Any] = {}
-        self._metadata: Dict[str, Dict[str, Any]] = {}
-
-    def register(
-        self, name: str, item: Any, metadata: Optional[Dict[str, Any]] = None
-    ) -> None:
-        """Register an item."""
-        self._items[name] = item
-        self._metadata[name] = metadata or {}
-
-    def unregister(self, name: str) -> None:
-        """Unregister an item."""
-        self._items.pop(name, None)
-        self._metadata.pop(name, None)
-
-    def get(self, name: str) -> Optional[Any]:
-        """Get an item by name."""
-        return self._items.get(name)
-
-    def get_all(self) -> Dict[str, Any]:
-        """Get all registered items."""
-        return self._items.copy()
-
-    def get_metadata(self, name: str) -> Dict[str, Any]:
-        """Get metadata for an item."""
-        return self._metadata.get(name, {})
-
-    def list_names(self) -> List[str]:
-        """List all registered item names."""
-        return list(self._items.keys())
-
-    def contains(self, name: str) -> bool:
-        """Check if an item is registered."""
-        return name in self._items

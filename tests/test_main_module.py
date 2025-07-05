@@ -3,16 +3,11 @@ Tests for main CLI module.
 """
 
 import json
-import subprocess
 import sys
-from pathlib import Path
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, patch
 
-import click
-import pytest
 from click.testing import CliRunner
 
-import pythonium
 from pythonium.main import (
     _auto_detect_python_path,
     _auto_detect_pythonium_path,
@@ -21,10 +16,8 @@ from pythonium.main import (
     _load_aixterm_config,
     _update_aixterm_config,
     _write_aixterm_config,
-    configure_aixterm,
     main,
     print_banner,
-    serve,
 )
 
 

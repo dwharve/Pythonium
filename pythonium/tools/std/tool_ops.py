@@ -352,7 +352,7 @@ class SearchToolsTool(BaseTool):
                 and hasattr(context, "registry")
                 and context.registry is not None
             ):
-                return context.registry
+                return cast(ToolRegistry, context.registry)
 
             # If no context registry available, return None to indicate error
             return None

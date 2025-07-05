@@ -3,16 +3,12 @@ Tests for common configuration and utility modules.
 """
 
 import asyncio
-import tempfile
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from pythonium.common.cache import CacheManager
 from pythonium.common.config import PythoniumSettings, ServerSettings
 from pythonium.common.events import EventManager
-from tests.conftest import BaseTestCase
 
 
 class TestPythoniumSettings:
@@ -56,108 +52,6 @@ class TestPythoniumSettings:
         assert hasattr(settings, "tools")
         assert hasattr(settings, "logging")
         assert hasattr(settings, "security")
-
-
-class TestCacheManager:
-    """Test cache management."""
-
-    @pytest.fixture
-    def cache_manager(self):
-        """Create a cache manager for testing."""
-        return CacheManager()
-
-    @pytest.mark.asyncio
-    async def test_cache_manager_initialization(self, cache_manager):
-        """Test cache manager initialization."""
-        await cache_manager.initialize()
-        try:
-            assert cache_manager.list_caches() == []
-        finally:
-            await cache_manager.shutdown()
-
-    @pytest.mark.asyncio
-    async def test_create_and_get_cache(self, cache_manager):
-        """Test creating and getting caches."""
-        await cache_manager.initialize()
-        try:
-            # Create a cache
-            cache = cache_manager.create_cache("test_cache")
-            assert cache is not None
-
-            # Get the cache
-            retrieved_cache = cache_manager.get_cache("test_cache")
-            assert retrieved_cache is cache
-
-            # List caches
-            assert "test_cache" in cache_manager.list_caches()
-        finally:
-            await cache_manager.shutdown()
-
-    @pytest.mark.asyncio
-    async def test_cache_operations(self, cache_manager):
-        """Test basic cache operations."""
-        await cache_manager.initialize()
-        try:
-            cache = cache_manager.create_cache("ops_cache")
-
-            # Set and get
-            cache.set("key1", "value1")
-            assert cache.get("key1") == "value1"
-
-            # Delete
-            cache.delete("key1")
-            assert cache.get("key1") is None
-
-            # Clear
-            cache.set("key2", "value2")
-            cache.set("key3", "value3")
-            cache.clear()
-            assert cache.get("key2") is None
-            assert cache.get("key3") is None
-        finally:
-            await cache_manager.shutdown()
-
-    @pytest.mark.asyncio
-    async def test_delete_cache(self, cache_manager):
-        """Test deleting caches."""
-        await cache_manager.initialize()
-        try:
-            cache_manager.create_cache("delete_me")
-            assert "delete_me" in cache_manager.list_caches()
-
-            result = cache_manager.delete_cache("delete_me")
-            assert result is True
-            assert "delete_me" not in cache_manager.list_caches()
-
-            # Try to delete non-existent cache
-            result = cache_manager.delete_cache("non_existent")
-            assert result is False
-        finally:
-            await cache_manager.shutdown()
-
-    @pytest.mark.asyncio
-    async def test_cache_stats(self, cache_manager):
-        """Test cache statistics."""
-        await cache_manager.initialize()
-        try:
-            cache = cache_manager.create_cache("stats_cache")
-
-            # Add some data to generate stats
-            cache.set("key1", "value1")
-            cache.set("key2", "value2")
-            cache.get("key1")  # Hit
-            cache.get("key3")  # Miss
-
-            # Get stats for all caches
-            all_stats = cache_manager.get_all_stats()
-            assert "stats_cache" in all_stats
-
-            stats = all_stats["stats_cache"]
-            assert (
-                hasattr(stats, "hits") or "hits" in stats or hasattr(stats, "hit_count")
-            )
-        finally:
-            await cache_manager.shutdown()
 
 
 class TestEventManager:
@@ -412,8 +306,6 @@ class TestConfigurationIntegration:
         assert hasattr(settings, "tools")
         assert hasattr(settings, "logging")
         assert hasattr(settings, "security")
-        assert hasattr(settings, "database")
-        assert hasattr(settings, "cache")
 
         # Server section should have expected attributes
         assert hasattr(settings.server, "host")

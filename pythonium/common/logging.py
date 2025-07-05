@@ -89,22 +89,5 @@ def setup_logging(
         )
 
 
-def audit_log(action: str, user: str = "system", **details) -> None:
-    """Log audit events."""
-    audit_logger = get_logger("audit")
-    audit_logger.info(f"AUDIT: {action}", user=user, action=action, **details)
-
-
-def performance_log(operation: str, duration: float, **metadata) -> None:
-    """Log performance metrics."""
-    perf_logger = get_logger("performance")
-    perf_logger.info(
-        f"PERFORMANCE: {operation} completed in {duration:.3f}s",
-        operation=operation,
-        duration=duration,
-        **metadata,
-    )
-
-
 # Default logger instance
 default_logger = get_logger("pythonium")

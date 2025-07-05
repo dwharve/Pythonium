@@ -9,12 +9,12 @@ import pytest
 
 from pythonium.common.base import Result
 from pythonium.common.error_handling import (
+    ErrorContext,
     ErrorReporter,
-    async_safe_execute,
     get_error_reporter,
+    handle_manager_error,
     handle_tool_error,
     result_handler,
-    safe_execute,
 )
 from pythonium.common.exceptions import PythoniumError
 
@@ -110,151 +110,69 @@ class TestErrorReporter:
         assert isinstance(reporter1, ErrorReporter)
 
 
-class TestSafeExecuteDecorator:
-    """Test safe_execute decorator functionality."""
+class TestErrorContext:
+    """Test ErrorContext functionality."""
 
-    def test_safe_execute_success(self):
-        """Test safe_execute with successful function."""
+    def test_error_context_with_exception(self):
+        """Test ErrorContext with exception handling."""
+        with patch.object(get_error_reporter(), "report_error") as mock_report:
+            with pytest.raises(ValueError):
+                with ErrorContext("test_component", "test_operation"):
+                    raise ValueError("Test error")
 
-        @safe_execute()
-        def successful_function(x, y):
-            return x + y
+            mock_report.assert_called_once()
+            args, kwargs = mock_report.call_args
+            assert args[0].args[0] == "Test error"
+            assert kwargs["component"] == "test_component"
+            assert kwargs["context"]["operation"] == "test_operation"
 
-        result = successful_function(2, 3)
+    def test_error_context_without_exception(self):
+        """Test ErrorContext without exception."""
+        with patch.object(get_error_reporter(), "report_error") as mock_report:
+            with ErrorContext("test_component", "test_operation"):
+                pass  # No exception
 
-        assert result == 5
+            mock_report.assert_not_called()
 
-    def test_safe_execute_with_exception(self):
-        """Test safe_execute with function that raises exception."""
-
-        @safe_execute(default_return="default")
-        def failing_function():
-            raise ValueError("Test error")
-
-        result = failing_function()
-
-        assert result == "default"
-
-    def test_safe_execute_no_default(self):
-        """Test safe_execute without default return value."""
-
-        @safe_execute()
-        def failing_function():
-            raise ValueError("Test error")
-
-        result = failing_function()
-
-        assert result is None
-
-    def test_safe_execute_with_custom_exceptions(self):
-        """Test safe_execute with custom exception types."""
-
-        @safe_execute(exceptions=ValueError)
-        def failing_function():
-            raise ValueError("Test error")
-
-        result = failing_function()
-
-        assert result is None
-
-    def test_safe_execute_different_exception_type(self):
-        """Test safe_execute with different exception type."""
-
-        @safe_execute(exceptions=ValueError)
-        def failing_function():
-            raise RuntimeError("Different error type")
-
-        with pytest.raises(RuntimeError):
-            failing_function()
-
-    def test_safe_execute_log_errors(self):
-        """Test safe_execute with log_errors enabled."""
-        with patch("pythonium.common.error_handling.logger") as mock_logger:
-
-            @safe_execute(log_errors=True)
-            def failing_function():
+    def test_error_context_suppress_exception(self):
+        """Test ErrorContext with exception suppression."""
+        with patch.object(get_error_reporter(), "report_error") as mock_report:
+            with ErrorContext("test_component", "test_operation", reraise=False):
                 raise ValueError("Test error")
 
-            failing_function()
-
-            mock_logger.error.assert_called_once()
-
-    def test_safe_execute_component_name(self):
-        """Test safe_execute with component name."""
-
-        @safe_execute(component="test_component")
-        def failing_function():
-            raise ValueError("Test error")
-
-        result = failing_function()
-
-        assert result is None
+            mock_report.assert_called_once()
 
 
-class TestAsyncSafeExecuteDecorator:
-    """Test async_safe_execute decorator functionality."""
+class TestHandleManagerErrorDecorator:
+    """Test handle_manager_error decorator functionality."""
 
     @pytest.mark.asyncio
-    async def test_async_safe_execute_success(self):
-        """Test async_safe_execute with successful async function."""
+    async def test_handle_manager_error_success(self):
+        """Test handle_manager_error with successful function."""
 
-        @async_safe_execute()
-        async def successful_async_function(x, y):
-            await asyncio.sleep(0.01)
-            return x + y
+        @handle_manager_error
+        async def successful_manager_function():
+            return {"manager": "success"}
 
-        result = await successful_async_function(2, 3)
+        result = await successful_manager_function()
 
-        assert result == 5
-
-    @pytest.mark.asyncio
-    async def test_async_safe_execute_with_exception(self):
-        """Test async_safe_execute with async function that raises exception."""
-
-        @async_safe_execute(default_return="async_default")
-        async def failing_async_function():
-            await asyncio.sleep(0.01)
-            raise ValueError("Async test error")
-
-        result = await failing_async_function()
-
-        assert result == "async_default"
+        assert isinstance(result, Result)
+        assert result.success is True
+        assert result.data == {"manager": "success"}
 
     @pytest.mark.asyncio
-    async def test_async_safe_execute_with_custom_exceptions(self):
-        """Test async_safe_execute with custom exception types."""
+    async def test_handle_manager_error_exception(self):
+        """Test handle_manager_error with function that raises exception."""
 
-        @async_safe_execute(exceptions=ValueError)
-        async def failing_async_function():
-            await asyncio.sleep(0.01)
-            raise ValueError("Async test error")
+        @handle_manager_error
+        async def failing_manager_function():
+            raise ValueError("Manager error")
 
-        result = await failing_async_function()
+        result = await failing_manager_function()
 
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_async_safe_execute_different_exception_type(self):
-        """Test async_safe_execute with different exception type."""
-
-        @async_safe_execute(exceptions=ValueError)
-        async def failing_async_function():
-            raise RuntimeError("Different async error type")
-
-        with pytest.raises(RuntimeError):
-            await failing_async_function()
-
-    @pytest.mark.asyncio
-    async def test_async_safe_execute_component_name(self):
-        """Test async_safe_execute with component name."""
-
-        @async_safe_execute(component="async_test_component")
-        async def failing_async_function():
-            raise ValueError("Async test error")
-
-        result = await failing_async_function()
-
-        assert result is None
+        assert isinstance(result, Result)
+        assert result.success is False
+        assert "Manager error" in result.error
 
 
 class TestResultHandlerDecorator:
@@ -435,29 +353,26 @@ class TestErrorHandlingIntegration:
         reporter = get_error_reporter()
         initial_count = len(reporter._error_history)
 
-        @safe_execute(log_errors=True)
+        @result_handler(component="test")
         def function_with_error():
             raise ValueError("Integration test error")
 
-        function_with_error()
+        result = function_with_error()
 
-        # Check if error was reported (depends on implementation)
-        # This test may need adjustment based on actual integration
-        assert len(reporter._error_history) >= initial_count
+        # Check if error was reported
+        assert len(reporter._error_history) > initial_count
+        assert isinstance(result, Result)
+        assert not result.success
 
     @pytest.mark.asyncio
     async def test_multiple_decorator_combinations(self):
         """Test combining multiple error handling decorators."""
 
         @handle_tool_error
-        @result_handler()
-        async def complex_tool_function(params, context):
+        async def complex_tool_function():
             return {"complex": "result"}
 
-        mock_params = Mock()
-        mock_context = Mock()
-
-        result = await complex_tool_function(mock_params, mock_context)
+        result = await complex_tool_function()
 
         assert isinstance(result, Result)
         assert result.success is True

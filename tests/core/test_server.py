@@ -134,7 +134,7 @@ class TestPythoniumMCPServer:
             # Mock the executor to not actually run
             with patch("asyncio.get_event_loop") as mock_loop:
                 # Mock run_in_executor to actually call the function so the mock gets triggered
-                async def mock_run_in_executor(executor, func, *args):
+                async def mock_run_in_executor(_executor, func, *args):
                     func(*args)
                     return None
 

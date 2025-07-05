@@ -152,46 +152,6 @@ class SecuritySettings(BaseSettings):
         return v
 
 
-class DatabaseSettings(BaseSettings):
-    """Database configuration with environment variable support."""
-
-    url: Optional[str] = Field(default=None, description="Database URL")
-    pool_size: int = Field(default=10, ge=1, description="Connection pool size")
-    timeout: int = Field(default=30, ge=1, description="Query timeout")
-
-    model_config = SettingsConfigDict(
-        env_prefix="PYTHONIUM_DB_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-    )
-
-
-class CacheSettings(BaseSettings):
-    """Cache configuration with environment variable support."""
-
-    enabled: bool = Field(default=True, description="Enable caching")
-    backend: str = Field(default="memory", description="Cache backend")
-    ttl: int = Field(default=300, ge=0, description="Default TTL in seconds")
-    max_size: int = Field(default=1000, ge=1, description="Max cache size")
-
-    model_config = SettingsConfigDict(
-        env_prefix="PYTHONIUM_CACHE_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-    )
-
-    @field_validator("backend")
-    @classmethod
-    def validate_backend(cls, v: str) -> str:
-        """Validate cache backend."""
-        allowed = ["memory", "redis", "memcached"]
-        if v not in allowed:
-            raise ValueError(f"Cache backend must be one of {allowed}")
-        return v
-
-
 class PythoniumSettings(BaseSettings):
     """Main Pythonium configuration with environment variable support."""
 
@@ -200,8 +160,6 @@ class PythoniumSettings(BaseSettings):
     tools: ToolSettings = Field(default_factory=ToolSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
-    database: DatabaseSettings = Field(default_factory=DatabaseSettings)
-    cache: CacheSettings = Field(default_factory=CacheSettings)
 
     # Global settings
     debug: bool = Field(default=False, description="Enable debug mode")

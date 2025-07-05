@@ -1,12 +1,8 @@
 """Tests for web-related tools."""
 
-from unittest.mock import AsyncMock, Mock, patch
-
 import pytest
 
-from pythonium.common.base import Result
 from pythonium.tools.base import ToolContext
-from pythonium.tools.std.parameters import HttpRequestParams, WebSearchParams
 from pythonium.tools.std.web import HttpClientTool, WebSearchTool
 
 

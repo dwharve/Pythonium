@@ -1,14 +1,17 @@
 """
 Standardized error handling framework for the Pythonium system.
 
-This module provides decorators, utilities, and patterns for consistent
-error handling across all components and tools.
+This module provides decorators and utilities for consistent error handling
+across all components. It focuses on the patterns actually used in the codebase:
+- Tools use @handle_tool_error for standardized Result objects
+- Managers should use @handle_manager_error for consistent error reporting
+- Core error reporting and tracking via ErrorReporter
 """
 
 import asyncio
 import functools
 import traceback
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union, cast
+from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
 from pythonium.common.base import Result
 from pythonium.common.exceptions import PythoniumError
@@ -79,76 +82,6 @@ def get_error_reporter() -> ErrorReporter:
     return _error_reporter
 
 
-def safe_execute(
-    default_return: Any = None,
-    exceptions: Union[Type[Exception], tuple[Type[Exception], ...]] = Exception,
-    log_errors: bool = True,
-    component: Optional[str] = None,
-) -> Callable[[F], F]:
-    """
-    Decorator for safe execution with error handling.
-
-    Args:
-        default_return: Value to return if an exception occurs
-        exceptions: Exception types to catch
-        log_errors: Whether to log caught exceptions
-        component: Component name for error reporting
-    """
-
-    def decorator(func: F) -> F:
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except exceptions as e:
-                if log_errors:
-                    get_error_reporter().report_error(
-                        e,
-                        context={"function": func.__name__, "args": str(args)[:100]},
-                        component=component,
-                    )
-                return default_return
-
-        return cast(F, wrapper)
-
-    return decorator
-
-
-def async_safe_execute(
-    default_return: Any = None,
-    exceptions: Union[Type[Exception], tuple[Type[Exception], ...]] = Exception,
-    log_errors: bool = True,
-    component: Optional[str] = None,
-) -> Callable[[F], F]:
-    """
-    Decorator for safe async execution with error handling.
-
-    Args:
-        default_return: Value to return if an exception occurs
-        exceptions: Exception types to catch
-        log_errors: Whether to log caught exceptions
-        component: Component name for error reporting
-    """
-
-    def decorator(func: F) -> F:
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            try:
-                return await func(*args, **kwargs)
-            except exceptions as e:
-                if log_errors:
-                    get_error_reporter().report_error(
-                        e,
-                        context={"function": func.__name__, "args": str(args)[:100]},
-                        component=component,
-                    )
-                return default_return
-
-        return cast(F, wrapper)
-
-    return decorator
-
-
 def _handle_exception_in_result(
     e: Exception, func_name: str, component: Optional[str], default_error_message: str
 ) -> Result:
@@ -180,6 +113,7 @@ def result_handler(
 
     This standardizes the error handling pattern across tools and components
     by ensuring all exceptions are caught and converted to Result.error().
+    Currently used by tools through handle_tool_error decorator.
 
     Args:
         component: Component name for error reporting
@@ -216,202 +150,12 @@ def result_handler(
     return decorator
 
 
-def _should_retry(attempt: int, max_attempts: int) -> bool:
-    """Helper function to determine if retry should continue."""
-    return attempt < max_attempts - 1
-
-
-def _log_retry_attempt(
-    attempt: int, func_name: str, error: Exception, delay: float
-) -> None:
-    """Helper function to log retry attempts."""
-    logger.warning(
-        f"Attempt {attempt + 1} failed for {func_name}: {error}. "
-        f"Retrying in {delay}s..."
-    )
-
-
-def _report_final_error(
-    error: Exception, func_name: str, max_attempts: int, component: Optional[str]
-) -> None:
-    """Helper function to report final error after all retries failed."""
-    get_error_reporter().report_error(
-        error,
-        context={
-            "function": func_name,
-            "attempts": max_attempts,
-            "final_attempt": True,
-        },
-        component=component,
-    )
-
-
-async def _execute_with_async_retry(
-    func,
-    args,
-    kwargs,
-    max_attempts: int,
-    delay: float,
-    backoff_multiplier: float,
-    exceptions,
-    component: Optional[str],
-):
-    """Execute function with async retry logic."""
-    current_delay = delay
-    last_exception = None
-
-    for attempt in range(max_attempts):
-        try:
-            return await func(*args, **kwargs)
-        except exceptions as e:
-            last_exception = e
-            if _should_retry(attempt, max_attempts):
-                _log_retry_attempt(attempt, func.__name__, e, current_delay)
-                await asyncio.sleep(current_delay)
-                current_delay *= backoff_multiplier
-            else:
-                _report_final_error(e, func.__name__, max_attempts, component)
-
-    # Re-raise the last exception after all attempts failed
-    if last_exception is not None:
-        raise last_exception
-    else:
-        raise RuntimeError("All retry attempts failed but no exception was captured")
-
-
-def _execute_with_sync_retry(
-    func,
-    args,
-    kwargs,
-    max_attempts: int,
-    delay: float,
-    backoff_multiplier: float,
-    exceptions,
-    component: Optional[str],
-):
-    """Execute function with sync retry logic."""
-    current_delay = delay
-    last_exception = None
-
-    for attempt in range(max_attempts):
-        try:
-            return func(*args, **kwargs)
-        except exceptions as e:
-            last_exception = e
-            if _should_retry(attempt, max_attempts):
-                _log_retry_attempt(attempt, func.__name__, e, current_delay)
-                import time
-
-                time.sleep(current_delay)
-                current_delay *= backoff_multiplier
-            else:
-                _report_final_error(e, func.__name__, max_attempts, component)
-
-    # Re-raise the last exception after all attempts failed
-    if last_exception is not None:
-        raise last_exception
-    else:
-        raise RuntimeError("All retry attempts failed but no exception was captured")
-
-
-def retry_on_error(
-    max_attempts: int = 3,
-    delay: float = 1.0,
-    backoff_multiplier: float = 2.0,
-    exceptions: Union[Type[Exception], tuple[Type[Exception], ...]] = Exception,
-    component: Optional[str] = None,
-) -> Callable[[F], F]:
-    """
-    Decorator for retrying operations on error.
-
-    Args:
-        max_attempts: Maximum number of retry attempts
-        delay: Initial delay between retries (seconds)
-        backoff_multiplier: Multiplier for exponential backoff
-        exceptions: Exception types to trigger retries
-        component: Component name for error reporting
-    """
-
-    def decorator(func: F) -> F:
-        @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs):
-            return await _execute_with_async_retry(
-                func,
-                args,
-                kwargs,
-                max_attempts,
-                delay,
-                backoff_multiplier,
-                exceptions,
-                component,
-            )
-
-        @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            return _execute_with_sync_retry(
-                func,
-                args,
-                kwargs,
-                max_attempts,
-                delay,
-                backoff_multiplier,
-                exceptions,
-                component,
-            )
-
-        # Return appropriate wrapper based on function type
-        if asyncio.iscoroutinefunction(func):
-            return cast(F, async_wrapper)
-        else:
-            return cast(F, sync_wrapper)
-
-    return decorator
-
-
-def timeout_handler(
-    timeout_seconds: float,
-    timeout_message: Optional[str] = None,
-    component: Optional[str] = None,
-) -> Callable[[F], F]:
-    """
-    Decorator for handling operation timeouts.
-
-    Args:
-        timeout_seconds: Timeout duration in seconds
-        timeout_message: Custom timeout message
-        component: Component name for error reporting
-    """
-
-    def decorator(func: F) -> F:
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            try:
-                return await asyncio.wait_for(
-                    func(*args, **kwargs), timeout=timeout_seconds
-                )
-            except asyncio.TimeoutError:
-                message = (
-                    timeout_message or f"Operation timed out after {timeout_seconds}s"
-                )
-                timeout_error = TimeoutError(message)
-
-                get_error_reporter().report_error(
-                    timeout_error,
-                    context={
-                        "function": func.__name__,
-                        "timeout_seconds": timeout_seconds,
-                    },
-                    component=component,
-                )
-                raise timeout_error
-
-        return cast(F, wrapper)
-
-    return decorator
-
-
 class ErrorContext:
-    """Context manager for error handling with automatic reporting."""
+    """Context manager for error handling with automatic reporting.
+
+    Useful for manager methods and other areas where decorator-based
+    error handling is not suitable.
+    """
 
     def __init__(
         self,
@@ -444,23 +188,33 @@ class ErrorContext:
         return False  # Let the exception propagate
 
 
-# Convenience functions for common error handling patterns
+# Convenience decorators for common error handling patterns
 def handle_tool_error(func: F) -> F:
-    """Decorator specifically for tool execute methods."""
+    """Decorator specifically for tool execute methods.
+
+    This is the primary decorator used by all standard tools.
+    """
     return result_handler(
         component="tool", default_error_message="Tool execution failed"
     )(func)
 
 
 def handle_manager_error(func: F) -> F:
-    """Decorator specifically for manager methods."""
+    """Decorator for manager methods.
+
+    Should be used by manager initialization, start, stop methods.
+    Currently not widely adopted - managers use try/catch blocks.
+    """
     return result_handler(
         component="manager", default_error_message="Manager operation failed"
     )(func)
 
 
 def handle_mcp_error(func: F) -> F:
-    """Decorator specifically for MCP protocol methods."""
+    """Decorator for MCP protocol methods.
+
+    Currently unused but available for MCP server/client operations.
+    """
     return result_handler(
         component="mcp", default_error_message="MCP operation failed"
     )(func)
