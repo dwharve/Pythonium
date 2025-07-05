@@ -42,7 +42,6 @@ class ServerSettings(BaseSettings):
         default=TransportType.STDIO,
         description="Transport protocol (stdio, http, websocket)",
     )
-    workers: int = Field(default=1, ge=1, description="Number of worker processes")
 
     # MCP specific settings
     name: str = Field(default="Pythonium MCP Server", description="Server name")
@@ -64,21 +63,8 @@ class ToolSettings(BaseSettings):
 
     enabled: bool = Field(default=True, description="Enable tool system")
     timeout: int = Field(default=30, ge=1, description="Default tool timeout")
-    max_concurrent: int = Field(
-        default=10, ge=1, description="Max concurrent tool executions"
-    )
-    categories: List[str] = Field(
-        default_factory=lambda: ["system", "network", "filesystem", "data_processing"],
-        description="Enabled tool categories",
-    )
 
     # MCP specific tool settings
-    enable_tool_execution: bool = Field(
-        default=True, description="Enable tool execution"
-    )
-    tool_timeout_seconds: int = Field(
-        default=300, ge=1, description="Tool execution timeout"
-    )
     max_tool_output_size_bytes: int = Field(
         default=10 * 1024 * 1024, description="Max tool output size"
     )
@@ -90,25 +76,12 @@ class ToolSettings(BaseSettings):
         case_sensitive=False,
     )
 
-    @field_validator("tool_timeout_seconds")
-    @classmethod
-    def validate_tool_timeout(cls, v):
-        if v < 1:
-            raise ValueError("tool_timeout_seconds must be at least 1")
-        return v
-
 
 class LoggingSettings(BaseSettings):
     """Logging configuration with environment variable support."""
 
     level: str = Field(default="INFO", description="Logging level")
-    format: str = Field(
-        default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        description="Log format string",
-    )
-    file: Optional[str] = Field(default=None, description="Log file path")
     max_size: int = Field(default=10485760, description="Max log file size")
-    backup_count: int = Field(default=5, description="Number of backup files")
 
     model_config = SettingsConfigDict(
         env_prefix="PYTHONIUM_LOGGING_",

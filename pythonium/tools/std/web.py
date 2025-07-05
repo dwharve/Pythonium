@@ -5,6 +5,7 @@ This module provides web-based tools including web search using various search e
 with robust HTML parsing and multiple fallback strategies, and HTTP client functionality.
 """
 
+import json
 import re
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
@@ -47,10 +48,24 @@ class WebSearchTool(BaseTool):
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
             name="web_search",
-            description="Perform web searches using DuckDuckGo search engine with multiple search strategies and robust HTML parsing. Returns high-quality search results with titles, URLs, and snippets.",
-            brief_description="Perform web searches using DuckDuckGo",
+            description="Perform web searches using DuckDuckGo search engine. "
+            "Uses DuckDuckGo Lite as the primary strategy, with HTML and API as fallbacks when enabled. "
+            "Returns search results with titles, URLs, and snippets. CRITICAL: When using this tool, "
+            "you MUST present the search results that were used to determine the answer to the user "
+            "in a clear, formatted manner showing: "
+            "1) The total number of results found, "
+            "2) Each result with its title, URL, and snippet, ",
+            brief_description="Perform web searches using DuckDuckGo with Lite as primary method and HTML/API fallback",
             category="network",
-            tags=["search", "web", "duckduckgo", "internet", "html-parsing"],
+            tags=[
+                "search",
+                "web",
+                "duckduckgo",
+                "internet",
+                "html-parsing",
+                "citations",
+                "results-display",
+            ],
             parameters=[
                 ToolParameter(
                     name="query",
@@ -61,7 +76,7 @@ class WebSearchTool(BaseTool):
                 ToolParameter(
                     name="engine",
                     type=ParameterType.STRING,
-                    description="Search engine to use (only 'duckduckgo' supported)",
+                    description="Search engine to use. ONLY 'duckduckgo' is supported - do not use 'google' or other engines",
                     default="duckduckgo",
                 ),
                 ToolParameter(
@@ -92,6 +107,12 @@ class WebSearchTool(BaseTool):
                     description="Include content snippets in results",
                     default=True,
                 ),
+                ToolParameter(
+                    name="use_fallback",
+                    type=ParameterType.BOOLEAN,
+                    description="Enable fallback search strategies (HTML/lite) if API fails. Enabled by default for comprehensive web search results.",
+                    default=True,
+                ),
             ],
         )
 
@@ -102,92 +123,240 @@ class WebSearchTool(BaseTool):
     ) -> Result[Any]:
         """Execute the web search operation."""
         try:
+            # Validate parameters
+            validation_result = self._validate_search_parameters(parameters, context)
+            if validation_result:
+                return validation_result
+
+            # Perform search
             engine = parameters.engine.lower()
-            if engine not in self._search_engines:
-                return Result[Any].error_result(
-                    f"Unsupported search engine: {engine}. "
-                    f"Supported engines: {', '.join(self._search_engines.keys())}"
-                )
+            results = await self._perform_search(parameters, context, engine)
 
-            # Validate search parameters
-            if not parameters.query.strip():
-                return Result[Any].error_result("Search query cannot be empty")
-
-            if parameters.max_results < 1 or parameters.max_results > 50:
-                return Result[Any].error_result("max_results must be between 1 and 50")
-
-            # Perform the search using the specified engine
-            search_function = self._search_engines[engine]
-            results = await search_function(parameters)
-
-            # Filter out any invalid results
-            valid_results = [
-                result
-                for result in results
-                if result.get("title") and result.get("url")
-            ]
-
-            return Result[Any].success_result(
-                data={
-                    "query": parameters.query,
-                    "engine": engine,
-                    "results": valid_results,
-                    "total_results": len(valid_results),
-                    "max_results": parameters.max_results,
-                    "language": parameters.language,
-                    "region": parameters.region,
-                    "include_snippets": parameters.include_snippets,
-                },
-                metadata={
-                    "engine_used": engine,
-                    "search_timeout": f"{parameters.timeout}s",
-                    "query_length": len(parameters.query),
-                    "results_filtered": len(results) - len(valid_results),
-                },
-            )
+            # Process and format results
+            return self._process_search_results(results, parameters, engine)
 
         except Exception as e:
-            return Result[Any].error_result(f"Web search failed: {str(e)}")
+            return self._handle_search_error(e, context)
 
-    async def _search_duckduckgo(self, params: WebSearchParams) -> List[Dict[str, Any]]:
-        """Perform search using DuckDuckGo with multiple fallback strategies."""
+    def _validate_search_parameters(
+        self, parameters: WebSearchParams, context: ToolContext
+    ) -> Optional[Result[Any]]:
+        """Validate search parameters and report progress."""
+        if context.progress_callback:
+            context.progress_callback("Validating search parameters")
+
+        engine = parameters.engine.lower()
+        if engine not in self._search_engines:
+            return Result[Any].error_result(
+                f"Unsupported search engine: {engine}. "
+                f"Supported engines: {', '.join(self._search_engines.keys())}"
+            )
+
+        if not parameters.query.strip():
+            return Result[Any].error_result("Search query cannot be empty")
+
+        if parameters.max_results < 1 or parameters.max_results > 50:
+            return Result[Any].error_result("max_results must be between 1 and 50")
+
+        return None
+
+    async def _perform_search(
+        self, parameters: WebSearchParams, context: ToolContext, engine: str
+    ) -> List[Dict[str, Any]]:
+        """Perform the actual search operation."""
+        if context.progress_callback:
+            context.progress_callback(f"Searching {engine}")
+
+        search_function = self._search_engines[engine]
+        results = await search_function(parameters, context)
+
+        if context.progress_callback:
+            context.progress_callback("Processing results")
+
+        return results
+
+    def _process_search_results(
+        self, results: List[Dict[str, Any]], parameters: WebSearchParams, engine: str
+    ) -> Result[Any]:
+        """Process and format search results."""
+        # Filter out any invalid results
+        valid_results = [
+            result for result in results if result.get("title") and result.get("url")
+        ]
+
+        if valid_results:
+            formatted_content = self._format_search_results(
+                valid_results, parameters.query
+            )
+            return Result[Any].success_result(
+                data=formatted_content,
+                metadata=self._create_success_metadata(
+                    engine, parameters, results, valid_results
+                ),
+            )
+        else:
+            return Result[Any].success_result(
+                data=f"No results found for query: '{parameters.query}'",
+                metadata=self._create_no_results_metadata(engine, parameters, results),
+            )
+
+    def _create_success_metadata(
+        self,
+        engine: str,
+        parameters: WebSearchParams,
+        results: List[Dict[str, Any]],
+        valid_results: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Create metadata for successful search results."""
+        return {
+            "engine_used": engine,
+            "search_timeout": f"{parameters.timeout}s",
+            "query_length": len(parameters.query),
+            "results_filtered": len(results) - len(valid_results),
+            "total_results": len(valid_results),
+        }
+
+    def _create_no_results_metadata(
+        self,
+        engine: str,
+        parameters: WebSearchParams,
+        results: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Create metadata for no results case."""
+        return {
+            "engine_used": engine,
+            "search_timeout": f"{parameters.timeout}s",
+            "query_length": len(parameters.query),
+            "results_filtered": len(results),
+            "total_results": 0,
+        }
+
+    def _handle_search_error(
+        self, error: Exception, context: ToolContext
+    ) -> Result[Any]:
+        """Handle and categorize search errors."""
+        if context.progress_callback:
+            context.progress_callback("Search failed")
+
+        error_msg = str(error).lower()
+
+        if "timeout" in error_msg:
+            return Result[Any].error_result(
+                "Web search timed out. This may be due to network connectivity issues or the search service being slow to respond."
+            )
+        elif "connection" in error_msg or "network" in error_msg:
+            return Result[Any].error_result(
+                "Web search failed due to network connection issues. Please check your internet connection."
+            )
+        elif "rate limit" in error_msg or "too many" in error_msg:
+            return Result[Any].error_result(
+                "Web search rate limited. The search service is temporarily limiting requests. Please wait a moment and try again."
+            )
+        elif "all search strategies failed" in error_msg:
+            return Result[Any].error_result(
+                "Web search failed. All search engines are currently unavailable. This may be due to network issues or service outages."
+            )
+        else:
+            return Result[Any].error_result(f"Web search failed: {str(error)}")
+
+    async def _search_duckduckgo(
+        self, params: WebSearchParams, context: ToolContext
+    ) -> List[Dict[str, Any]]:
+        """Perform search using DuckDuckGo. Uses Lite as primary strategy, with HTML and API as fallbacks only if no results are found."""
         results = []
-        errors = []
+        errors: List[str] = []
 
         try:
-            # Strategy 1: Try DuckDuckGo Instant Answer API first
-            try:
-                instant_results = await self._search_duckduckgo_instant(params)
-                results.extend(instant_results)
-            except Exception as e:
-                errors.append(f"Instant API failed: {str(e)}")
+            # Strategy 1: Try DuckDuckGo Lite first
+            results = await self._try_lite_search(params, context, errors)
+            if results:
+                return results[: params.max_results]
 
-            # Strategy 2: If we need more results, try HTML search
-            if len(results) < params.max_results:
-                try:
-                    remaining = params.max_results - len(results)
-                    html_results = await self._search_duckduckgo_html(params, remaining)
-                    results.extend(html_results)
-                except Exception as e:
-                    errors.append(f"HTML search failed: {str(e)}")
-
-            # Strategy 3: If still no results, try lite search
-            if not results:
-                try:
-                    lite_results = await self._search_duckduckgo_lite(params)
-                    results.extend(lite_results)
-                except Exception as e:
-                    errors.append(f"Lite search failed: {str(e)}")
+            # Only use fallback strategies if enabled and no results
+            if params.use_fallback:
+                results = await self._try_fallback_searches(params, context, errors)
+                if results:
+                    return results[: params.max_results]
 
             # If we still have no results, raise an exception with all errors
-            if not results:
-                error_msg = "All search strategies failed: " + "; ".join(errors)
-                raise Exception(error_msg)
-
+            self._raise_no_results_error(params, errors)
             return results[: params.max_results]
 
         except Exception as e:
             raise Exception(f"DuckDuckGo search failed: {str(e)}")
+
+    async def _try_lite_search(
+        self,
+        params: WebSearchParams,
+        context: ToolContext,
+        errors: List[str],
+    ) -> List[Dict[str, Any]]:
+        """Try DuckDuckGo Lite search."""
+        try:
+            if context.progress_callback:
+                context.progress_callback("Searching web results")
+            return await self._search_duckduckgo_lite(params)
+        except Exception as e:
+            errors.append(f"Lite search failed: {str(e)}")
+            return []
+
+    async def _try_fallback_searches(
+        self,
+        params: WebSearchParams,
+        context: ToolContext,
+        errors: List[str],
+    ) -> List[Dict[str, Any]]:
+        """Try HTML and API fallback searches."""
+        # Strategy 2: Try HTML search
+        html_results = await self._try_html_search(params, context, errors)
+        if html_results:
+            return html_results
+
+        # Strategy 3: Try API search
+        return await self._try_api_search(params, context, errors)
+
+    async def _try_html_search(
+        self,
+        params: WebSearchParams,
+        context: ToolContext,
+        errors: List[str],
+    ) -> List[Dict[str, Any]]:
+        """Try DuckDuckGo HTML search."""
+        try:
+            if context.progress_callback:
+                context.progress_callback("Searching additional results")
+            return await self._search_duckduckgo_html(params, params.max_results)
+        except Exception as e:
+            errors.append(f"HTML search failed: {str(e)}")
+            return []
+
+    async def _try_api_search(
+        self,
+        params: WebSearchParams,
+        context: ToolContext,
+        errors: List[str],
+    ) -> List[Dict[str, Any]]:
+        """Try DuckDuckGo API search."""
+        try:
+            if context.progress_callback:
+                context.progress_callback("Searching for instant answers")
+            return await self._search_duckduckgo_instant(params)
+        except Exception as e:
+            errors.append(f"API search failed: {str(e)}")
+            return []
+
+    def _raise_no_results_error(
+        self, params: WebSearchParams, errors: List[str]
+    ) -> None:
+        """Raise appropriate error when no results are found."""
+        if params.use_fallback:
+            error_msg = "All search strategies failed: " + "; ".join(errors)
+        else:
+            error_msg = (
+                "Lite search failed and fallback is disabled. Consider enabling fallback with use_fallback=True: "
+                + "; ".join(errors)
+            )
+        raise Exception(error_msg)
 
     async def _search_duckduckgo_instant(
         self, params: WebSearchParams
@@ -195,7 +364,6 @@ class WebSearchTool(BaseTool):
         """Search DuckDuckGo Instant Answer API."""
         try:
             async with HttpService(timeout=params.timeout) as http_service:
-                # DuckDuckGo Instant Answer API
                 search_url = "https://api.duckduckgo.com/"
                 search_params = {
                     "q": params.query,
@@ -209,219 +377,343 @@ class WebSearchTool(BaseTool):
                 if not result.success:
                     raise Exception(f"DuckDuckGo API error: {result.error}")
 
-                data = result.data
-                if not isinstance(data, dict):
-                    raise Exception("Invalid API response format")
-
-                results = []
-
-                # Process instant answer
-                if data.get("AbstractText"):
-                    abstract_url = data.get("AbstractURL", "")
-                    if abstract_url and not self._is_valid_url(abstract_url):
-                        abstract_url = ""
-
-                    results.append(
-                        {
-                            "title": data.get("Heading", "DuckDuckGo Instant Answer"),
-                            "url": abstract_url,
-                            "snippet": data.get("AbstractText", ""),
-                            "source": data.get("AbstractSource", "DuckDuckGo"),
-                            "type": "instant_answer",
-                        }
-                    )
-
-                # Process related topics
-                for topic in data.get("RelatedTopics", [])[: params.max_results]:
-                    if isinstance(topic, dict) and "Text" in topic:
-                        topic_url = topic.get("FirstURL", "")
-                        if topic_url and not self._is_valid_url(topic_url):
-                            topic_url = ""
-
-                        # Extract title from text (before the first " - ")
-                        text = topic.get("Text", "")
-                        title = text.split(" - ")[0] if " - " in text else text
-
-                        results.append(
-                            {
-                                "title": title,
-                                "url": topic_url,
-                                "snippet": text if params.include_snippets else "",
-                                "source": "DuckDuckGo",
-                                "type": "related_topic",
-                            }
-                        )
+                data = self._parse_api_response(result.data)
+                results = self._process_api_results(data, params)
 
                 return results[: params.max_results]
 
         except Exception as e:
             raise Exception(f"DuckDuckGo instant search failed: {str(e)}")
 
-    async def _search_duckduckgo_html(  # noqa: C901
+    def _parse_api_response(self, response_data: Any) -> Dict[str, Any]:
+        """Parse API response data."""
+        if isinstance(response_data, dict):
+            # Check if this is the raw response wrapper
+            if "content" in response_data and "status_code" in response_data:
+                # Parse the content as JSON
+                content = response_data["content"]
+                if isinstance(content, bytes):
+                    content = content.decode("utf-8")
+
+                try:
+                    parsed_data: Dict[str, Any] = json.loads(content)
+                    return parsed_data
+                except json.JSONDecodeError:
+                    raise Exception("Failed to parse API response as JSON")
+            else:
+                # This is already parsed JSON
+                return response_data
+        else:
+            raise Exception(f"Unexpected API response format: {type(response_data)}")
+
+    def _process_api_results(
+        self, data: Dict[str, Any], params: WebSearchParams
+    ) -> List[Dict[str, Any]]:
+        """Process API response data into results."""
+        results: List[Dict[str, Any]] = []
+
+        # Process related topics FIRST (primary web search results)
+        self._add_related_topics(results, data, params)
+
+        # Add instant answer as supplementary context (if space allows)
+        self._add_instant_answer(results, data, params)
+
+        # Add definition as supplementary context (if space allows)
+        self._add_definition(results, data, params)
+
+        return results
+
+    def _add_related_topics(
+        self,
+        results: List[Dict[str, Any]],
+        data: Dict[str, Any],
+        params: WebSearchParams,
+    ) -> None:
+        """Add related topics to results."""
+        related_topics = data.get("RelatedTopics", [])
+        for topic in related_topics:
+            if len(results) >= params.max_results:
+                break
+
+            if isinstance(topic, dict) and topic.get("Text"):
+                topic_url = topic.get("FirstURL", "")
+                if topic_url and not self._is_valid_url(topic_url):
+                    topic_url = ""
+
+                # Extract title from text (before the first " - ")
+                text = topic.get("Text", "")
+                title = text.split(" - ")[0] if " - " in text else text
+
+                # Clean the title
+                title = self._clean_text(title)
+                if len(title) > 80:
+                    title = title[:77] + "..."
+
+                results.append(
+                    {
+                        "title": title,
+                        "url": topic_url,
+                        "snippet": text if params.include_snippets else "",
+                        "source": "DuckDuckGo",
+                        "type": "web_result",
+                    }
+                )
+
+    def _add_instant_answer(
+        self,
+        results: List[Dict[str, Any]],
+        data: Dict[str, Any],
+        params: WebSearchParams,
+    ) -> None:
+        """Add instant answer to results if available."""
+        if data.get("AbstractText") and len(results) < params.max_results:
+            abstract_url = data.get("AbstractURL", "")
+            if abstract_url and not self._is_valid_url(abstract_url):
+                abstract_url = ""
+
+            results.append(
+                {
+                    "title": data.get("Heading", "DuckDuckGo Instant Answer"),
+                    "url": abstract_url,
+                    "snippet": data.get("AbstractText", ""),
+                    "source": data.get("AbstractSource", "DuckDuckGo"),
+                    "type": "instant_answer",
+                }
+            )
+
+    def _add_definition(
+        self,
+        results: List[Dict[str, Any]],
+        data: Dict[str, Any],
+        params: WebSearchParams,
+    ) -> None:
+        """Add definition to results if available."""
+        if data.get("Definition") and len(results) < params.max_results:
+            definition_url = data.get("DefinitionURL", "")
+            if definition_url and not self._is_valid_url(definition_url):
+                definition_url = ""
+
+            results.append(
+                {
+                    "title": f"Definition: {data.get('Heading', 'Unknown')}",
+                    "url": definition_url,
+                    "snippet": data.get("Definition", ""),
+                    "source": data.get("DefinitionSource", "DuckDuckGo"),
+                    "type": "definition",
+                }
+            )
+
+    async def _search_duckduckgo_html(
         self, params: WebSearchParams, limit: int
     ) -> List[Dict[str, Any]]:
         """Search DuckDuckGo HTML for additional results using proper HTML parsing."""
         try:
-            async with HttpService(timeout=params.timeout) as http_service:
-                search_url = "https://html.duckduckgo.com/html/"
-                search_params = {
-                    "q": params.query,
-                }
+            html_content = await self._fetch_html_content(params)
+            if not html_content:
+                return []
 
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-                }
-
-                result = await http_service.get(
-                    search_url, params=search_params, headers=headers
-                )
-
-                if not result.success:
-                    return []
-
-                html_content = result.data
-                if isinstance(html_content, dict):
-                    return []
-
-                # Parse HTML with BeautifulSoup
-                soup = BeautifulSoup(html_content, "html.parser")
-                results = []
-
-                # Find search result containers
-                result_containers = soup.find_all(
-                    "div", class_=lambda x: x and "result" in x
-                )
-
-                for container in result_containers[:limit]:
-                    try:
-                        # Extract title and URL
-                        title_link = container.find(  # type: ignore
-                            "a", class_=lambda x: x and "result__a" in x
-                        )
-                        if not title_link:
-                            continue
-
-                        title = self._clean_text(title_link.get_text())  # type: ignore
-                        url = title_link.get("href", "")  # type: ignore
-
-                        # Clean and validate URL
-                        if url.startswith("//duckduckgo.com/l/?"):
-                            # Extract actual URL from DuckDuckGo redirect
-                            url = self._extract_redirect_url(url)
-
-                        if not self._is_valid_url(url):
-                            continue
-
-                        # Extract snippet
-                        snippet = ""
-                        if params.include_snippets:
-                            snippet_elem = container.find(  # type: ignore
-                                "a", class_=lambda x: x and "result__snippet" in x
-                            )
-                            if snippet_elem:
-                                snippet = self._clean_text(snippet_elem.get_text())  # type: ignore
-                            else:
-                                # Fallback: look for any text content in the container
-                                snippet = self._extract_fallback_snippet(
-                                    container, params.query
-                                )
-
-                        if title:  # Only add if we have a title
-                            results.append(
-                                {
-                                    "title": title,
-                                    "url": url,
-                                    "snippet": snippet,
-                                    "source": "DuckDuckGo",
-                                    "type": "web_result",
-                                }
-                            )
-
-                    except Exception:
-                        # Skip this result but continue with others
-                        continue
-
-                return results
+            soup = BeautifulSoup(html_content, "html.parser")
+            return self._parse_html_results(soup, params, limit)
 
         except Exception:
             return []
 
-    async def _search_duckduckgo_lite(  # noqa: C901
+    async def _fetch_html_content(self, params: WebSearchParams) -> str:
+        """Fetch HTML content from DuckDuckGo."""
+        async with HttpService(timeout=params.timeout) as http_service:
+            search_url = "https://html.duckduckgo.com/html/"
+            search_params = {"q": params.query}
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            }
+
+            result = await http_service.get(
+                search_url, params=search_params, headers=headers
+            )
+
+            if not result.success or isinstance(result.data, dict):
+                return ""
+
+            html_data: str = str(result.data)
+            return html_data
+
+    def _parse_html_results(
+        self, soup: BeautifulSoup, params: WebSearchParams, limit: int
+    ) -> List[Dict[str, Any]]:
+        """Parse HTML soup to extract search results."""
+        results: List[Dict[str, Any]] = []
+        seen_urls: set[str] = set()  # Track URLs to prevent duplicates
+
+        # Find search result containers
+        result_containers = soup.find_all("div", class_=lambda x: x and "result" in x)
+
+        for container in result_containers[: limit * 2]:
+            result_data = self._extract_result_from_container(
+                container, params, seen_urls
+            )
+            if result_data and len(results) < limit:
+                results.append(result_data)
+
+        return results
+
+    def _extract_result_from_container(
+        self, container, params: WebSearchParams, seen_urls: set
+    ) -> Optional[Dict[str, Any]]:
+        """Extract result data from a single container."""
+        try:
+            # Extract title and URL
+            title_link = container.find("a", class_=lambda x: x and "result__a" in x)
+            if not title_link:
+                return None
+
+            title = self._clean_text(title_link.get_text())
+            url = title_link.get("href", "")
+
+            # Clean and validate URL
+            if url.startswith("//duckduckgo.com/l/?"):
+                url = self._extract_redirect_url(url)
+
+            if not self._is_valid_url(url):
+                return None
+
+            # Skip duplicates
+            normalized_url = url.lower().rstrip("/")
+            if normalized_url in seen_urls:
+                return None
+            seen_urls.add(normalized_url)
+
+            # Extract snippet
+            snippet = self._extract_html_snippet(container, params)
+
+            if not title:
+                return None
+
+            return {
+                "title": title,
+                "url": url,
+                "snippet": snippet,
+                "source": "DuckDuckGo",
+                "type": "web_result",
+            }
+
+        except Exception:
+            return None
+
+    def _extract_html_snippet(self, container, params: WebSearchParams) -> str:
+        """Extract snippet from HTML container."""
+        if not params.include_snippets:
+            return ""
+
+        snippet_elem = container.find(
+            "a", class_=lambda x: x and "result__snippet" in x
+        )
+        if snippet_elem:
+            return self._clean_text(snippet_elem.get_text())
+        else:
+            return self._extract_fallback_snippet(container, params.query)
+
+    async def _search_duckduckgo_lite(
         self, params: WebSearchParams
     ) -> List[Dict[str, Any]]:
         """Fallback search using DuckDuckGo Lite interface."""
         try:
-            async with HttpService(timeout=params.timeout) as http_service:
-                search_url = "https://lite.duckduckgo.com/lite/"
-                search_params = {
-                    "q": params.query,
-                }
+            html_content = await self._fetch_lite_content(params)
+            if not html_content:
+                return []
 
-                headers = {"User-Agent": "Mozilla/5.0 (compatible; Python/httpx)"}
-
-                result = await http_service.get(
-                    search_url, params=search_params, headers=headers
-                )
-
-                if not result.success:
-                    return []
-
-                html_content = result.data
-                if isinstance(html_content, dict):
-                    return []
-
-                # Parse with BeautifulSoup
-                soup = BeautifulSoup(html_content, "html.parser")
-                results = []
-
-                # Find result links in lite interface
-                links = soup.find_all("a", href=True)
-
-                for link in links[: params.max_results]:
-                    href = link.get("href", "")  # type: ignore
-                    if (
-                        not href
-                        or str(href).startswith("#")
-                        or "duckduckgo.com" in str(href)
-                    ):
-                        continue
-
-                    title = self._clean_text(link.get_text())
-                    if not title or len(title) < 3:
-                        continue
-
-                    # Extract URL
-                    url = str(href)
-                    if str(href).startswith("//duckduckgo.com/l/?"):
-                        url = self._extract_redirect_url(str(href))
-
-                    if not self._is_valid_url(url):
-                        continue
-
-                    # For lite version, snippet is minimal
-                    snippet = ""
-                    if params.include_snippets:
-                        # Try to find surrounding text
-                        parent = link.parent
-                        if parent:
-                            snippet = self._clean_text(parent.get_text())
-                            if len(snippet) > 200:
-                                snippet = snippet[:200] + "..."
-
-                    results.append(
-                        {
-                            "title": title,
-                            "url": url,
-                            "snippet": snippet,
-                            "source": "DuckDuckGo Lite",
-                            "type": "web_result",
-                        }
-                    )
-
-                return results[: params.max_results]
+            soup = BeautifulSoup(html_content, "html.parser")
+            return self._parse_lite_results(soup, params)
 
         except Exception:
             return []
+
+    async def _fetch_lite_content(self, params: WebSearchParams) -> str:
+        """Fetch content from DuckDuckGo Lite."""
+        async with HttpService(timeout=params.timeout) as http_service:
+            search_url = "https://lite.duckduckgo.com/lite/"
+            search_params = {"q": params.query}
+            headers = {"User-Agent": "Mozilla/5.0 (compatible; Python/httpx)"}
+
+            result = await http_service.get(
+                search_url, params=search_params, headers=headers
+            )
+
+            if not result.success or isinstance(result.data, dict):
+                return ""
+
+            lite_data: str = str(result.data)
+            return lite_data
+
+    def _parse_lite_results(
+        self, soup: BeautifulSoup, params: WebSearchParams
+    ) -> List[Dict[str, Any]]:
+        """Parse lite interface results."""
+        results: List[Dict[str, Any]] = []
+        seen_urls: set[str] = set()  # Track URLs to prevent duplicates
+
+        # Find result links in lite interface
+        links = soup.find_all("a", href=True)
+
+        for link in links:
+            if len(results) >= params.max_results:
+                break
+
+            result_data = self._extract_lite_result_from_link(link, params, seen_urls)
+            if result_data:
+                results.append(result_data)
+
+        return results[: params.max_results]
+
+    def _extract_lite_result_from_link(
+        self, link, params: WebSearchParams, seen_urls: set
+    ) -> Optional[Dict[str, Any]]:
+        """Extract result data from a lite interface link."""
+        href = link.get("href", "")
+        if not href or str(href).startswith("#") or "duckduckgo.com" in str(href):
+            return None
+
+        title = self._clean_text(link.get_text())
+        if not title or len(title) < 3:
+            return None
+
+        # Extract URL
+        url = str(href)
+        if str(href).startswith("//duckduckgo.com/l/?"):
+            url = self._extract_redirect_url(str(href))
+
+        if not self._is_valid_url(url):
+            return None
+
+        # Skip duplicates
+        normalized_url = url.lower().rstrip("/")
+        if normalized_url in seen_urls:
+            return None
+        seen_urls.add(normalized_url)
+
+        # Extract minimal snippet for lite version
+        snippet = self._extract_lite_snippet(link, params)
+
+        return {
+            "title": title,
+            "url": url,
+            "snippet": snippet,
+            "source": "DuckDuckGo Lite",
+            "type": "web_result",
+        }
+
+    def _extract_lite_snippet(self, link, params: WebSearchParams) -> str:
+        """Extract snippet from lite interface link."""
+        if not params.include_snippets:
+            return ""
+
+        parent = link.parent
+        if parent:
+            snippet = self._clean_text(parent.get_text())
+            if len(snippet) > 200:
+                snippet = snippet[:200] + "..."
+            return snippet
+
+        return ""
 
     def _is_valid_url(self, url: str) -> bool:
         """Validate if a URL is properly formatted and accessible."""
@@ -495,6 +787,75 @@ class WebSearchTool(BaseTool):
 
         except Exception:
             return f"Search result for: {query}"
+
+    def _format_search_results(self, results: List[Dict[str, Any]], query: str) -> str:
+        """Format search results for user-friendly display.
+
+        Args:
+            results: List of search result dictionaries
+            query: The original search query
+
+        Returns:
+            Formatted string for user consumption
+        """
+        if not results:
+            return f"No results found for query: '{query}'"
+
+        # Create a concise but informative summary
+        formatted_lines = []
+
+        # Add header with result count
+        count = len(results)
+        formatted_lines.append(
+            f"Found {count} search result{'s' if count != 1 else ''} for '{query}':"
+        )
+        formatted_lines.append("")
+
+        # Format each result concisely
+        for i, result in enumerate(results, 1):
+            title = result.get("title", "No title")
+            url = result.get("url", "")
+            snippet = result.get("snippet", "")
+
+            # Truncate title if too long
+            if len(title) > 80:
+                title = title[:77] + "..."
+
+            # Add result with title and URL
+            formatted_lines.append(f"{i}. {title}")
+
+            if url:
+                # Show short URL for better readability
+                if len(url) > 60:
+                    domain = url.split("/")[2] if "//" in url else url.split("/")[0]
+                    formatted_lines.append(f"   {domain}")
+                else:
+                    formatted_lines.append(f"   {url}")
+
+            if snippet:
+                # Clean and format snippet - keep it short
+                snippet = snippet.strip()
+                if len(snippet) > 120:
+                    snippet = snippet[:117] + "..."
+                formatted_lines.append(f"   {snippet}")
+
+            formatted_lines.append("")
+
+        # Add concise attribution
+        formatted_lines.append("Sources: DuckDuckGo")
+        formatted_lines.append("")
+        formatted_lines.append(
+            "If you need more information, continue your research by using the http_client tool to read any of the returned results via the URLs provided, or use the web_search tool to search again with a different query. Accuracy is of paramount importance, so always verify the information you provide."
+        )
+        formatted_lines.append("")
+        formatted_lines.append(
+            "If your answer was determined by any information that you researched, cite only the specific sources you derived information from at the end of your message. Each source should contain the title, full url, and full snippet. This information should always be included, regardless of the brevity of the response."
+        )
+        formatted_lines.append(
+            "Example: 1. <SomeTitle>\n<SomeURL>\n<SomeSnippet>\n\n2. ..."
+        )
+
+        return "\n".join(formatted_lines)
 
 
 class HttpClientTool(BaseTool):

@@ -13,7 +13,7 @@ from pythonium.common.config import TransportType
 from pythonium.common.exceptions import PythoniumError
 from pythonium.common.logging import get_logger
 from pythonium.core.config import ConfigurationManager
-from pythonium.core.tools import ToolDiscoveryManager
+from pythonium.core.tools import ToolDiscoveryManager, ToolRegistry
 from pythonium.tools.base import BaseTool, ToolContext
 
 logger = get_logger(__name__)
@@ -50,6 +50,7 @@ class PythoniumMCPServer:
 
         # Tool management
         self.tool_discovery = ToolDiscoveryManager()
+        self.tool_registry = ToolRegistry()
 
         # State
         self._running = False
@@ -158,6 +159,14 @@ class PythoniumMCPServer:
         # Store the tool instance
         self._registered_tools[tool_name] = tool
 
+        # Register the tool in the registry as well
+        self.tool_registry.register_tool(
+            tool.__class__,
+            name=tool_name,
+            version=tool.metadata.version,
+            tags=tool.metadata.tags,
+        )
+
         # Create the tool function for FastMCP with proper signature
         tool_func = self._create_dynamic_tool_function(tool)
 
@@ -217,6 +226,7 @@ class PythoniumMCPServer:
                         f"pythonium.tools.{tool_instance.metadata.name}"
                     ),
                     progress_callback=None,
+                    registry=self.tool_registry,
                 )
 
                 # Bind arguments to parameters using the signature
@@ -227,8 +237,17 @@ class PythoniumMCPServer:
                 # Execute the tool with parameters and context
                 result = await tool_instance.execute(parameters, context)
 
-                # Return the result data
-                return result.data if result else None
+                # Handle Result object properly for MCP
+                if result:
+                    if result.success:
+                        # Return the data for successful results
+                        return result.data if result.data is not None else ""
+                    else:
+                        # For errors, raise an exception that FastMCP can handle
+                        error_msg = result.error or "Unknown error occurred"
+                        raise Exception(error_msg)
+                else:
+                    return ""
 
             except Exception as e:
                 logger.error(f"Error executing tool {tool_instance.metadata.name}: {e}")

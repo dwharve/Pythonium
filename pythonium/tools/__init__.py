@@ -2,4 +2,4 @@
 Pythonium Tools Package
 """
 
-__all__ = []
+__all__: list[str] = []

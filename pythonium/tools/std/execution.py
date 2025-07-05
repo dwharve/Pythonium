@@ -223,7 +223,7 @@ class ExecuteCommandTool(BaseTool):
             env.update(environment)
         return env
 
-    async def _execute_async_subprocess(  # noqa: C901
+    async def _execute_async_subprocess(
         self,
         cmd: Union[str, List[str]],
         parameters: ExecuteCommandParams,
@@ -237,9 +237,36 @@ class ExecuteCommandTool(BaseTool):
         if progress_callback:
             progress_callback("🔄 Creating subprocess...")
 
-        # Create subprocess based on whether shell execution is requested
+        # Create subprocess
+        process = await self._create_subprocess(cmd, parameters, env, cwd)
+
+        # Track the process
+        self._running_processes[process_id] = process
+
+        if progress_callback:
+            progress_callback(f"📊 Process started (PID: {process.pid})")
+
+        try:
+            return await self._handle_subprocess_execution(process, parameters)
+
+        except asyncio.TimeoutError:
+            await self._handle_subprocess_timeout(
+                process, parameters, progress_callback
+            )
+            raise asyncio.TimeoutError(
+                f"Command timed out after {parameters.timeout} seconds"
+            )
+
+    async def _create_subprocess(
+        self,
+        cmd: Union[str, List[str]],
+        parameters: ExecuteCommandParams,
+        env: Dict[str, str],
+        cwd: Optional[str],
+    ) -> asyncio.subprocess.Process:
+        """Create subprocess based on parameters."""
         if parameters.shell and isinstance(cmd, str):
-            process = await asyncio.create_subprocess_shell(
+            return await asyncio.create_subprocess_shell(
                 cmd,
                 stdin=asyncio.subprocess.PIPE if parameters.stdin else None,
                 stdout=asyncio.subprocess.PIPE if parameters.capture_output else None,
@@ -250,7 +277,7 @@ class ExecuteCommandTool(BaseTool):
         else:
             if isinstance(cmd, str):
                 cmd = shlex.split(cmd)
-            process = await asyncio.create_subprocess_exec(
+            return await asyncio.create_subprocess_exec(
                 *cmd,
                 stdin=asyncio.subprocess.PIPE if parameters.stdin else None,
                 stdout=asyncio.subprocess.PIPE if parameters.capture_output else None,
@@ -259,80 +286,90 @@ class ExecuteCommandTool(BaseTool):
                 env=env,
             )
 
-        # Track the process
-        self._running_processes[process_id] = process
+    async def _handle_subprocess_execution(
+        self, process: asyncio.subprocess.Process, parameters: ExecuteCommandParams
+    ) -> Dict[str, Union[str, int, float]]:
+        """Handle subprocess execution and output capture."""
+        stdin_data = parameters.stdin.encode() if parameters.stdin else None
 
+        if parameters.capture_output:
+            return await self._execute_with_output_capture(
+                process, parameters, stdin_data
+            )
+        else:
+            return await self._execute_without_output_capture(
+                process, parameters, stdin_data
+            )
+
+    async def _execute_with_output_capture(
+        self,
+        process: asyncio.subprocess.Process,
+        parameters: ExecuteCommandParams,
+        stdin_data: Optional[bytes],
+    ) -> Dict[str, Union[str, int, float]]:
+        """Execute subprocess with output capture."""
+        stdout_data, stderr_data = await asyncio.wait_for(
+            process.communicate(input=stdin_data), timeout=parameters.timeout
+        )
+
+        # Check output size limits
+        stdout_data = self._truncate_output_if_needed(stdout_data, "stdout")
+        stderr_data = self._truncate_output_if_needed(stderr_data, "stderr")
+
+        return {
+            "stdout": stdout_data.decode(errors="replace") if stdout_data else "",
+            "stderr": stderr_data.decode(errors="replace") if stderr_data else "",
+            "returncode": process.returncode or 0,
+            "pid": process.pid,
+        }
+
+    async def _execute_without_output_capture(
+        self,
+        process: asyncio.subprocess.Process,
+        parameters: ExecuteCommandParams,
+        stdin_data: Optional[bytes],
+    ) -> Dict[str, Union[str, int, float]]:
+        """Execute subprocess without output capture."""
+        if stdin_data and process.stdin:
+            process.stdin.write(stdin_data)
+            process.stdin.close()
+
+        await asyncio.wait_for(process.wait(), timeout=parameters.timeout)
+
+        return {
+            "returncode": process.returncode or 0,
+            "pid": process.pid,
+        }
+
+    def _truncate_output_if_needed(
+        self, output_data: Optional[bytes], output_type: str
+    ) -> bytes:
+        """Truncate output if it exceeds size limits."""
+        if output_data and len(output_data) > MAX_OUTPUT_SIZE:
+            logger.warning(
+                f"{output_type} output truncated (exceeded {MAX_OUTPUT_SIZE} bytes)"
+            )
+            return output_data[:MAX_OUTPUT_SIZE] + b"\n[OUTPUT TRUNCATED]"
+        return output_data or b""
+
+    async def _handle_subprocess_timeout(
+        self,
+        process: asyncio.subprocess.Process,
+        parameters: ExecuteCommandParams,
+        progress_callback: Optional[Callable[[str], None]],
+    ) -> None:
+        """Handle subprocess timeout by terminating the process."""
         if progress_callback:
-            progress_callback(f"📊 Process started (PID: {process.pid})")
+            progress_callback(f"⏰ Process timeout, terminating (PID: {process.pid})")
 
         try:
-            # Handle stdin and communicate with timeout
-            stdin_data = parameters.stdin.encode() if parameters.stdin else None
-
-            if parameters.capture_output:
-                stdout_data, stderr_data = await asyncio.wait_for(
-                    process.communicate(input=stdin_data), timeout=parameters.timeout
-                )
-
-                # Check output size limits
-                if stdout_data and len(stdout_data) > MAX_OUTPUT_SIZE:
-                    logger.warning(
-                        f"stdout output truncated (exceeded {MAX_OUTPUT_SIZE} bytes)"
-                    )
-                    stdout_data = (
-                        stdout_data[:MAX_OUTPUT_SIZE] + b"\n[OUTPUT TRUNCATED]"
-                    )
-
-                if stderr_data and len(stderr_data) > MAX_OUTPUT_SIZE:
-                    logger.warning(
-                        f"stderr output truncated (exceeded {MAX_OUTPUT_SIZE} bytes)"
-                    )
-                    stderr_data = (
-                        stderr_data[:MAX_OUTPUT_SIZE] + b"\n[OUTPUT TRUNCATED]"
-                    )
-
-                return {
-                    "stdout": (
-                        stdout_data.decode(errors="replace") if stdout_data else ""
-                    ),
-                    "stderr": (
-                        stderr_data.decode(errors="replace") if stderr_data else ""
-                    ),
-                    "returncode": process.returncode or 0,
-                    "pid": process.pid,
-                }
-            else:
-                # No output capture, just wait for completion
-                if stdin_data and process.stdin:
-                    process.stdin.write(stdin_data)
-                    process.stdin.close()
-
-                await asyncio.wait_for(process.wait(), timeout=parameters.timeout)
-
-                return {
-                    "returncode": process.returncode or 0,
-                    "pid": process.pid,
-                }
-
+            process.terminate()
+            await asyncio.wait_for(process.wait(), timeout=5.0)
         except asyncio.TimeoutError:
-            # Handle timeout by terminating the process
             if progress_callback:
-                progress_callback(
-                    f"⏰ Process timeout, terminating (PID: {process.pid})"
-                )
-
-            try:
-                process.terminate()
-                await asyncio.wait_for(process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
-                if progress_callback:
-                    progress_callback(f"💀 Force killing process (PID: {process.pid})")
-                process.kill()
-                await process.wait()
-
-            raise asyncio.TimeoutError(
-                f"Command timed out after {parameters.timeout} seconds"
-            )
+                progress_callback(f"💀 Force killing process (PID: {process.pid})")
+            process.kill()
+            await process.wait()
 
     def _process_result(
         self,

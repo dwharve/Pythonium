@@ -139,6 +139,7 @@ class ToolContext:
     permissions: Dict[str, bool] = field(default_factory=dict)
     logger: Optional[logging.Logger] = None
     progress_callback: Optional[Callable[[str], None]] = None
+    registry: Optional[Any] = None
 
     def has_permission(self, permission: str) -> bool:
         """Check if context has a specific permission."""

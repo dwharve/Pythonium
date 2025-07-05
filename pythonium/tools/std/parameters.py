@@ -290,6 +290,9 @@ class WebSearchParams(ParameterModel):
     include_snippets: bool = Field(
         True, description="Include content snippets in results"
     )
+    use_fallback: bool = Field(
+        True, description="Enable fallback search strategies (HTML/lite) if API fails"
+    )
 
     @field_validator("query")
     @classmethod

@@ -232,34 +232,41 @@ class HttpService:
             client, request_kwargs, method, url
         )
 
-    async def _parse_response(self, response: httpx.Response) -> Dict[str, Any]:
+    async def _parse_response(self, response: httpx.Response) -> Any:
         """Parse HTTP response into structured data."""
         # Raise for status to catch HTTP errors
         response.raise_for_status()
 
+        # Try to parse response content
+        content_type = response.headers.get("content-type", "").lower()
+
+        # For JSON responses, return the parsed JSON directly as data
+        # to maintain compatibility with existing tools
+        if "application/json" in content_type:
+            try:
+                parsed_json = response.json()
+                return parsed_json  # Return JSON directly for compatibility
+            except json.JSONDecodeError:
+                # Fallback to text if JSON parsing fails
+                pass
+
+        # For HTML/text responses, return the text directly for compatibility
+        if "text/html" in content_type:
+            return response.text
+
+        # For other text responses, return the text directly for compatibility
+        if "text/" in content_type or "application/xml" in content_type:
+            return response.text
+
+        # For non-JSON/text responses, return wrapper with metadata
         result = {
             "status_code": response.status_code,
             "headers": dict(response.headers),
             "url": str(response.url),
+            "content": response.content,
+            "content_type": "binary",
+            "size": len(response.content),
         }
-
-        # Try to parse response content
-        content_type = response.headers.get("content-type", "").lower()
-
-        if "application/json" in content_type:
-            try:
-                result["json"] = response.json()
-                result["content_type"] = "json"
-            except json.JSONDecodeError:
-                result["text"] = response.text
-                result["content_type"] = "text"
-        elif "text/" in content_type or "application/xml" in content_type:
-            result["text"] = response.text
-            result["content_type"] = "text"
-        else:
-            result["content"] = response.content
-            result["content_type"] = "binary"
-            result["size"] = len(response.content)
 
         return result
 

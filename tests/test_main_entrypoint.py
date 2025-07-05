@@ -15,7 +15,7 @@ class TestMainEntrypoint:
     def test_main_entrypoint_import(self):
         """Test that __main__.py can be imported without error."""
         # This test ensures the module can be imported
-        import pythonium.__main__  # noqa: F401
+        import pythonium.__main__
 
     @patch("pythonium.main.main")
     def test_main_entrypoint_execution(self, mock_main):

@@ -5,7 +5,6 @@ This module defines the exception hierarchy used throughout
 the Pythonium project for consistent error handling.
 """
 
-import asyncio
 from typing import Any, Dict, Optional
 
 

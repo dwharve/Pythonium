@@ -87,39 +87,6 @@ class BaseComponent(ABC):
         """Perform a health check on the component."""
         return self.status == ComponentStatus.RUNNING
 
-    async def safe_initialize(self) -> None:
-        """Safely initialize the component with error handling."""
-        async with self._initialization_lock:
-            if self.status != ComponentStatus.UNINITIALIZED:
-                return
-
-            try:
-                self.status = ComponentStatus.INITIALIZING
-                await self.initialize()
-                self.status = ComponentStatus.RUNNING
-                self.last_error = None
-            except Exception as e:
-                self.status = ComponentStatus.ERROR
-                self.last_error = e
-                raise
-
-    async def safe_shutdown(self) -> None:
-        """Safely shutdown the component with error handling."""
-        if self.status in [
-            ComponentStatus.STOPPED,
-            ComponentStatus.UNINITIALIZED,
-        ]:
-            return
-
-        try:
-            self.status = ComponentStatus.STOPPING
-            await self.shutdown()
-            self.status = ComponentStatus.STOPPED
-        except Exception as e:
-            self.status = ComponentStatus.ERROR
-            self.last_error = e
-            raise
-
     def get_status_info(self) -> Dict[str, Any]:
         """Get comprehensive status information."""
         return {
@@ -178,25 +145,6 @@ class Result(BaseModel, Generic[T]):
             metadata=metadata or {},
             execution_time=execution_time,
         )
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert result to dictionary."""
-        return {
-            "success": self.success,
-            "data": self.data,
-            "error": self.error,
-            "metadata": self.metadata,
-            "execution_time": self.execution_time,
-            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
-        }
-
-    def is_success(self) -> bool:
-        """Check if result is successful."""
-        return self.success
-
-    def is_error(self) -> bool:
-        """Check if result is an error."""
-        return not self.success
 
     def get_data_or_raise(self) -> T:
         """Get data or raise exception if error."""

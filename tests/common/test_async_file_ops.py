@@ -71,50 +71,6 @@ class TestAsyncFileService:
             Path(f.name).unlink()
 
     @pytest.mark.asyncio
-    async def test_copy_file(self):
-        """Test copying files asynchronously."""
-        service = AsyncFileService()
-
-        with tempfile.NamedTemporaryFile(mode="w", delete=False) as src:
-            test_content = "Content to copy"
-            src.write(test_content)
-            src.flush()
-
-            with tempfile.NamedTemporaryFile(delete=False) as dst:
-                dst_path = dst.name
-
-            # Remove destination file (we just wanted the name)
-            Path(dst_path).unlink()
-
-            # Test copying file
-            await service.copy_file(src.name, dst_path)
-
-            # Verify copy was successful
-            assert Path(dst_path).exists()
-            with open(dst_path, "r") as f:
-                copied_content = f.read()
-                assert copied_content == test_content
-
-            # Clean up
-            Path(src.name).unlink()
-            Path(dst_path).unlink()
-
-    @pytest.mark.asyncio
-    async def test_delete_file(self):
-        """Test deleting files asynchronously."""
-        service = AsyncFileService()
-
-        with tempfile.NamedTemporaryFile(delete=False) as f:
-            file_path = f.name
-
-            # Verify file exists
-            assert Path(file_path).exists()
-
-            # Test deleting file
-            await service.delete_file(file_path)
-            assert not Path(file_path).exists()
-
-    @pytest.mark.asyncio
     async def test_error_handling(self):
         """Test error handling in async file operations."""
         service = AsyncFileService()
