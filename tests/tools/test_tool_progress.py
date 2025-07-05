@@ -2,20 +2,14 @@
 Tests for tool-level progress notification functionality.
 """
 
-import asyncio
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
-from pythonium.common.parameter_validation import (
-    ExecuteCommandParams,
-)
 from pythonium.tools.base import ToolContext
 from pythonium.tools.std import FindFilesTool, SearchFilesTool
 from pythonium.tools.std.execution import ExecuteCommandTool
-from pythonium.tools.std.parameters import FindFilesParams, SearchTextParams
 
 
 class TestToolProgressNotifications:
