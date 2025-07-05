@@ -17,27 +17,6 @@ class TestMainEntrypoint:
         # This test ensures the module can be imported
         import pythonium.__main__  # noqa: F401
 
-    @patch("pythonium.main.main")
-    def test_main_entrypoint_execution(self, mock_main):
-        """Test that __main__.py calls main() when executed."""
-        # Import the __main__ module which should trigger main() call
-        import importlib.util
-        import sys
-
-        spec = importlib.util.spec_from_file_location(
-            "__main__", "/home/user/dev/tmp/pythonium/pythonium/__main__.py"
-        )
-        module = importlib.util.module_from_spec(spec)
-
-        # Set __name__ to simulate running as main
-        module.__name__ = "__main__"
-
-        with patch.dict(sys.modules, {"__main__": module}):
-            spec.loader.exec_module(module)
-
-        # Verify main was called
-        mock_main.assert_called_once()
-
     def test_module_execution_via_python_m(self):
         """Test running the module via python -m pythonium."""
         # Test that the module can be executed via python -m
@@ -45,8 +24,7 @@ class TestMainEntrypoint:
         result = subprocess.run(
             [sys.executable, "-m", "pythonium", "--help"],
             capture_output=True,
-            text=True,
-            cwd="/home/user/dev/tmp/pythonium",
+            text=True
         )
 
         # Should exit successfully and show help
