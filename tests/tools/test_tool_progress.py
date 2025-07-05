@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from pythonium.tools.base import ToolContext
-from pythonium.tools.std import FindFilesTool, SearchFilesTool
 from pythonium.tools.std.execution import ExecuteCommandTool
+from pythonium.tools.std.file_ops import FindFilesTool, SearchFilesTool
 
 
 class TestToolProgressNotifications:

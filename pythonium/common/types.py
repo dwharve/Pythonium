@@ -5,7 +5,6 @@ This module provides type hints, protocols, and type aliases used
 throughout the Pythonium project for better type safety and documentation.
 """
 
-from abc import abstractmethod
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -17,13 +16,9 @@ from typing import (
     List,
     NamedTuple,
     Optional,
-    Protocol,
     TypeVar,
     Union,
-    runtime_checkable,
 )
-
-from pythonium.common.base import Result
 
 # Type aliases
 JSON = Union[Dict[str, Any], List[Any], str, int, float, bool, None]

@@ -197,24 +197,3 @@ def handle_tool_error(func: F) -> F:
     return result_handler(
         component="tool", default_error_message="Tool execution failed"
     )(func)
-
-
-def handle_manager_error(func: F) -> F:
-    """Decorator for manager methods.
-
-    Should be used by manager initialization, start, stop methods.
-    Currently not widely adopted - managers use try/catch blocks.
-    """
-    return result_handler(
-        component="manager", default_error_message="Manager operation failed"
-    )(func)
-
-
-def handle_mcp_error(func: F) -> F:
-    """Decorator for MCP protocol methods.
-
-    Currently unused but available for MCP server/client operations.
-    """
-    return result_handler(
-        component="mcp", default_error_message="MCP operation failed"
-    )(func)

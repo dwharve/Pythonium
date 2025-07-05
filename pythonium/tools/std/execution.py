@@ -15,7 +15,7 @@ from typing import Callable, Dict, List, Optional, Union
 
 from pythonium.common.base import Result
 from pythonium.common.error_handling import handle_tool_error
-from pythonium.common.parameter_validation import validate_parameters
+from pythonium.common.parameters import validate_parameters
 from pythonium.tools.base import (
     BaseTool,
     ParameterType,

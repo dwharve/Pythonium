@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 from pythonium.common.async_file_ops import AsyncFileError, async_file_service
 from pythonium.common.base import Result
 from pythonium.common.error_handling import handle_tool_error
-from pythonium.common.parameter_validation import validate_parameters
+from pythonium.common.parameters import validate_parameters
 from pythonium.tools.base import (
     BaseTool,
     ParameterType,

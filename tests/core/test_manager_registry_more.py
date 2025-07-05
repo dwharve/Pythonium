@@ -1,12 +1,13 @@
 import asyncio
+
 import pytest
 
-from pythonium.core import ManagerRegistry
 from pythonium.core.managers import (
-    register_manager,
+    ManagerRegistry,
     get_manager,
     get_manager_by_type,
     get_manager_registry,
+    register_manager,
 )
 from pythonium.managers import BaseManager
 from pythonium.managers.base import ManagerDependency
@@ -31,10 +32,9 @@ class BManager(AManager):
         super().__init__(name)
         self.info.dependencies.append(ManagerDependency(AManager))
 
+
 class BSimple(AManager):
     pass
-
-
 
 
 @pytest.mark.asyncio
@@ -57,17 +57,18 @@ async def test_unregistration_and_global_helpers():
 @pytest.mark.asyncio
 async def test_circular_dependency_detection():
     registry = ManagerRegistry()
+
     class A(AManager):
         def __init__(self, name="a"):
             super().__init__(name)
             self.info.dependencies.append(ManagerDependency(B))
+
     class B(AManager):
         def __init__(self, name="b"):
             super().__init__(name)
             self.info.dependencies.append(ManagerDependency(A))
+
     registry.register_manager("a", A)
     registry.register_manager("b", B)
     with pytest.raises(Exception):
         await registry.start_all_managers()
-
-

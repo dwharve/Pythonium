@@ -23,14 +23,13 @@ from typing import (
     cast,
 )
 
-from pythonium.common.base import BaseComponent
+from pythonium.common.base import BaseComponent, ComponentState
 from pythonium.common.config import PythoniumSettings, get_settings
 from pythonium.common.events import EventManager, get_event_manager
 from pythonium.common.exceptions import (
     InitializationError,
     ManagerError,
 )
-from pythonium.common.lifecycle import ComponentState
 from pythonium.common.logging import get_logger
 from pythonium.common.types import HealthStatus, MetadataDict
 

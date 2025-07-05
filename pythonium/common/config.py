@@ -265,10 +265,3 @@ def get_settings() -> PythoniumSettings:
     if _settings is None:
         _settings = PythoniumSettings()
     return _settings
-
-
-def load_settings_from_file(file_path: Union[str, Path]) -> PythoniumSettings:
-    """Load settings from file and set as global instance."""
-    global _settings
-    _settings = PythoniumSettings.load_from_file(file_path)
-    return _settings

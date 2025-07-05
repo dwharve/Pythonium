@@ -1,8 +1,8 @@
 import pytest
 
-from pythonium.core import ManagerRegistry
-from pythonium.managers import BaseManager
 from pythonium.common.types import HealthStatus
+from pythonium.core.managers import ManagerRegistry
+from pythonium.managers import BaseManager
 
 
 class SimpleManager(BaseManager):

@@ -44,8 +44,6 @@ class EventSubscription:
     last_called: Optional[datetime] = None
 
 
-
-
 class EventBus:
     """Central event bus for managing events and subscriptions."""
 
@@ -170,7 +168,6 @@ class EventBus:
         self._stats["events_published"] += 1
         self._logger.debug(f"Publishing event '{event_name}' from source '{source}'")
 
-
         handlers_called = 0
 
         # Get subscriptions for this event
@@ -225,7 +222,6 @@ class EventBus:
         )
 
         return handlers_called
-
 
     def get_subscriptions(
         self, event_name: Optional[str] = None

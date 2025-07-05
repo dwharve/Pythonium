@@ -27,6 +27,41 @@ class ComponentStatus(Enum):
     ERROR = "error"
 
 
+class ComponentState(Enum):
+    """Unified component lifecycle states."""
+
+    # Creation and Discovery
+    CREATED = "created"
+    DISCOVERED = "discovered"
+
+    # Loading and Initialization
+    LOADING = "loading"
+    LOADED = "loaded"
+    INITIALIZING = "initializing"
+    INITIALIZED = "initialized"
+
+    # Connection and Session
+    CONNECTING = "connecting"
+
+    # Operation States
+    STARTING = "starting"
+    RUNNING = "running"
+    READY = "ready"
+    ACTIVE = "active"
+    IDLE = "idle"
+
+    # Cleanup and Shutdown
+    STOPPING = "stopping"
+    STOPPED = "stopped"
+    CLEANUP = "cleanup"
+    DISCONNECTING = "disconnecting"
+    DISCONNECTED = "disconnected"
+    DISPOSED = "disposed"
+
+    # Error State
+    ERROR = "error"
+
+
 class BaseComponent(ABC):
     """Base class for all Pythonium components."""
 

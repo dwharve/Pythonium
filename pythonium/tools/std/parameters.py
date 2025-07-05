@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 from pydantic import Field, field_validator
 
-from pythonium.common.parameter_validation import ParameterModel
+from pythonium.common.parameters import ParameterModel
 
 
 class DescribeToolParams(ParameterModel):

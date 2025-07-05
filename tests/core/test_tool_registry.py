@@ -60,7 +60,9 @@ class TestToolRegistry:
     def test_list_and_tags_and_category(self):
         registry = ToolRegistry()
         id1 = registry.register_tool(SimpleTool, tags=["a"], dependencies=["x"])
-        id2 = registry.register_tool(AnotherTool, tags=["b"], dependencies=["x"], aliases=["two"])
+        id2 = registry.register_tool(
+            AnotherTool, tags=["b"], dependencies=["x"], aliases=["two"]
+        )
         assert registry.has_tool("two")
         registry.add_tool_tag(id1, "b")
         registry.remove_tool_tag(id1, "a")
@@ -80,8 +82,10 @@ class TestToolRegistry:
     def test_event_handlers_and_has_tool(self):
         registry = ToolRegistry()
         events = []
+
         def on_register(data):
             events.append(data["tool_id"])
+
         registry.add_event_handler("tool_registered", on_register)
         tid = registry.register_tool(SimpleTool)
         assert events == [tid]

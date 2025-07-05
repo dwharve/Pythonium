@@ -12,7 +12,6 @@ from pythonium.common.error_handling import (
     ErrorContext,
     ErrorReporter,
     get_error_reporter,
-    handle_manager_error,
     handle_tool_error,
     result_handler,
 )
@@ -141,38 +140,6 @@ class TestErrorContext:
                 raise ValueError("Test error")
 
             mock_report.assert_called_once()
-
-
-class TestHandleManagerErrorDecorator:
-    """Test handle_manager_error decorator functionality."""
-
-    @pytest.mark.asyncio
-    async def test_handle_manager_error_success(self):
-        """Test handle_manager_error with successful function."""
-
-        @handle_manager_error
-        async def successful_manager_function():
-            return {"manager": "success"}
-
-        result = await successful_manager_function()
-
-        assert isinstance(result, Result)
-        assert result.success is True
-        assert result.data == {"manager": "success"}
-
-    @pytest.mark.asyncio
-    async def test_handle_manager_error_exception(self):
-        """Test handle_manager_error with function that raises exception."""
-
-        @handle_manager_error
-        async def failing_manager_function():
-            raise ValueError("Manager error")
-
-        result = await failing_manager_function()
-
-        assert isinstance(result, Result)
-        assert result.success is False
-        assert "Manager error" in result.error
 
 
 class TestResultHandlerDecorator:

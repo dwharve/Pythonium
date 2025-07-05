@@ -1,6 +1,6 @@
 import pytest
 
-from pythonium.core import ManagerRegistry
+from pythonium.core.managers import ManagerRegistry
 from pythonium.managers import BaseManager
 
 

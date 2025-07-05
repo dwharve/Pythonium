@@ -23,7 +23,6 @@ class TestMainEntrypoint:
         # Import the __main__ module which should trigger main() call
         import importlib.util
         import sys
-
         from pathlib import Path
 
         repo_root = Path(__file__).resolve().parents[1]

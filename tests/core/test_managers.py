@@ -5,22 +5,16 @@ This module contains comprehensive tests for all manager implementations
 including the core framework, and configuration.
 """
 
-import asyncio
-import json
-import tempfile
-from datetime import datetime, timedelta
-from pathlib import Path
-
 import pytest
 
+from pythonium.common.base import ComponentState
 from pythonium.common.exceptions import ManagerError
-from pythonium.common.lifecycle import ComponentState
-from pythonium.core import ManagerRegistry
+from pythonium.core.managers import ManagerRegistry
 from pythonium.managers import (
     BaseManager,
     ManagerPriority,
 )
-from pythonium.managers.base import HealthCheck, ManagerDependency
+from pythonium.managers.base import HealthCheck
 
 
 class MockManager(BaseManager):

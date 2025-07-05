@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, cast
 from pythonium.common.base import Result
 from pythonium.common.error_handling import handle_tool_error
 from pythonium.common.exceptions import ToolExecutionError
-from pythonium.common.parameter_validation import validate_parameters
+from pythonium.common.parameters import validate_parameters
 from pythonium.core.tools.registry import ToolRegistry
 from pythonium.tools.base import (
     BaseTool,

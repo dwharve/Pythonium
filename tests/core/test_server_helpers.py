@@ -6,7 +6,7 @@ import pytest
 
 from pythonium.common.config import TransportType
 from pythonium.core.server import PythoniumMCPServer
-from pythonium.tools.base import BaseTool, ToolMetadata, ToolParameter, ParameterType
+from pythonium.tools.base import BaseTool, ParameterType, ToolMetadata, ToolParameter
 
 
 class DummyTool(BaseTool):
@@ -17,13 +17,22 @@ class DummyTool(BaseTool):
             description="dummy",
             category="test",
             parameters=[
-                ToolParameter(name="x", type=ParameterType.INTEGER, description="x", required=True),
-                ToolParameter(name="y", type=ParameterType.STRING, description="y", required=False, default="d"),
+                ToolParameter(
+                    name="x", type=ParameterType.INTEGER, description="x", required=True
+                ),
+                ToolParameter(
+                    name="y",
+                    type=ParameterType.STRING,
+                    description="y",
+                    required=False,
+                    default="d",
+                ),
             ],
         )
 
     async def execute(self, params, context):
         from pythonium.common.base import Result
+
         return Result.success_result({"sum": params["x"], "y": params.get("y")})
 
 
@@ -53,14 +62,17 @@ def test_map_parameter_type():
     for pt, expected in mapping.items():
         assert server._map_parameter_type(pt) == expected
 
+
 @pytest.mark.asyncio
 async def test_run_http_and_ws():
     server = PythoniumMCPServer(config_overrides={"server": {"transport": "http"}})
     server.start = AsyncMock()
     server.stop = AsyncMock()
     server.mcp_server.run = Mock()
+
     async def mock_run_in_executor(executor, func, *args):
         func(*args)
+
     with patch("asyncio.get_event_loop") as mock_loop:
         mock_loop.return_value.run_in_executor = mock_run_in_executor
         await server.run()

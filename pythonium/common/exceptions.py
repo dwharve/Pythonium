@@ -33,26 +33,8 @@ class PythoniumError(Exception):
         }
 
 
-class ConfigurationError(PythoniumError):
-    """Raised when there's a configuration error."""
-
-    pass
-
-
 class InitializationError(PythoniumError):
     """Raised when component initialization fails."""
-
-    pass
-
-
-class ShutdownError(PythoniumError):
-    """Raised when component shutdown fails."""
-
-    pass
-
-
-class LifecycleError(PythoniumError):
-    """Raised when component lifecycle operation fails."""
 
     pass
 
@@ -63,20 +45,8 @@ class ToolError(PythoniumError):
     pass
 
 
-class ToolNotFoundError(ToolError):
-    """Raised when a tool cannot be found."""
-
-    pass
-
-
 class ToolExecutionError(ToolError):
     """Raised when tool execution fails."""
-
-    pass
-
-
-class ToolValidationError(ToolError):
-    """Raised when tool parameter validation fails."""
 
     pass
 
@@ -85,85 +55,3 @@ class ManagerError(PythoniumError):
     """Base exception for manager-related errors."""
 
     pass
-
-
-class ManagerNotFoundError(ManagerError):
-    """Raised when a manager cannot be found."""
-
-    pass
-
-
-class ManagerStateError(ManagerError):
-    """Raised when a manager is in an invalid state."""
-
-    pass
-
-
-class MCPError(PythoniumError):
-    """Base exception for MCP-related errors."""
-
-    pass
-
-
-class MCPProtocolError(MCPError):
-    """Raised when there's an MCP protocol error."""
-
-    pass
-
-
-class MCPTransportError(MCPError):
-    """Raised when there's an MCP transport error."""
-
-    pass
-
-
-class MCPClientError(MCPError):
-    """Raised when there's an MCP client error."""
-
-    pass
-
-
-class ValidationError(PythoniumError):
-    """Raised when data validation fails."""
-
-    pass
-
-
-class NetworkError(PythoniumError):
-    """Raised when network operations fail."""
-
-    pass
-
-
-class TimeoutError(PythoniumError):
-    """Raised when operations timeout."""
-
-    pass
-
-
-def handle_exception(exc: Exception, context: str = "") -> PythoniumError:
-    """Convert generic exceptions to Pythonium exceptions."""
-    if isinstance(exc, PythoniumError):
-        return exc
-
-    # Map common Python exceptions to Pythonium exceptions
-    exception_mapping = {
-        ValueError: ValidationError,
-        TypeError: ValidationError,
-        ConnectionError: NetworkError,
-        asyncio.TimeoutError: TimeoutError,
-    }
-
-    error_class = exception_mapping.get(type(exc), PythoniumError)
-
-    message = str(exc)
-    if context:
-        message = f"{context}: {message}"
-
-    return error_class(
-        message=message,
-        details={
-            "original_exception": str(exc),
-            "original_type": type(exc).__name__,
-        },
-    )

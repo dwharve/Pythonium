@@ -3,12 +3,12 @@ from pathlib import Path
 
 import pytest
 
+from pythonium.common.config import AuthenticationMethod, TransportType
 from pythonium.core.config import (
     ConfigurationManager,
     get_config_manager,
     set_config_manager,
 )
-from pythonium.common.config import AuthenticationMethod, TransportType
 
 
 class TestConfigurationManager:
@@ -53,7 +53,15 @@ class TestConfigurationManager:
         assert cm.are_experimental_features_enabled() is False
 
     def test_convenience_and_globals(self):
-        cm = ConfigurationManager(config_overrides={"server": {"transport": TransportType.HTTP.value, "host": "x", "port": 80}})
+        cm = ConfigurationManager(
+            config_overrides={
+                "server": {
+                    "transport": TransportType.HTTP.value,
+                    "host": "x",
+                    "port": 80,
+                }
+            }
+        )
         assert cm.get_server_config().transport == TransportType.HTTP
         assert cm.get_security_config() is cm.get_settings().security
         assert cm.get_logging_config() is cm.get_settings().logging
