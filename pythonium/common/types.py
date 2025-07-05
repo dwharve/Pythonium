@@ -59,9 +59,8 @@ class EventData(NamedTuple):
     source: Optional[str] = None
 
 
-# Event handler type aliases
+# Event handler type alias
 EventHandler = Callable[[Any], Awaitable[None]]
-EventFilter = Callable[[Any], bool]
 
 
 # Tool system types

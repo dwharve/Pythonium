@@ -44,45 +44,6 @@ class EventSubscription:
     last_called: Optional[datetime] = None
 
 
-class EventFilter:
-    """Filter for events."""
-
-    def __init__(
-        self,
-        event_pattern: Optional[str] = None,
-        source_pattern: Optional[str] = None,
-        data_filter: Optional[Callable[[Any], bool]] = None,
-    ):
-        self.event_pattern = event_pattern
-        self.source_pattern = source_pattern
-        self.data_filter = data_filter
-
-    def matches(self, event: EventData) -> bool:
-        """Check if event matches this filter."""
-        if self.event_pattern and not self._pattern_match(
-            self.event_pattern, event.name
-        ):
-            return False
-
-        if self.source_pattern and event.source:
-            if not self._pattern_match(self.source_pattern, event.source):
-                return False
-
-        if self.data_filter and not self.data_filter(event.data):
-            return False
-
-        return True
-
-    def _pattern_match(self, pattern: str, value: str) -> bool:
-        """Simple pattern matching with wildcards."""
-        if "*" not in pattern:
-            return pattern == value
-
-        # Convert wildcard pattern to regex-like matching
-        import re
-
-        regex_pattern = pattern.replace("*", ".*")
-        return bool(re.match(f"^{regex_pattern}$", value))
 
 
 class EventBus:
@@ -92,7 +53,6 @@ class EventBus:
         self.name = name
         self._subscriptions: Dict[str, List[EventSubscription]] = {}
         self._global_subscriptions: List[EventSubscription] = []
-        self._event_filters: List[EventFilter] = []
         self._event_history: List[EventData] = []
         self._max_history = 1000
         self._logger = get_logger(f"{__name__}.bus.{name}")
@@ -210,11 +170,6 @@ class EventBus:
         self._stats["events_published"] += 1
         self._logger.debug(f"Publishing event '{event_name}' from source '{source}'")
 
-        # Check event filters
-        if self._event_filters:
-            if not any(f.matches(event) for f in self._event_filters):
-                self._logger.debug(f"Event '{event_name}' filtered out")
-                return 0
 
         handlers_called = 0
 
@@ -271,19 +226,6 @@ class EventBus:
 
         return handlers_called
 
-    def add_filter(self, event_filter: EventFilter) -> None:
-        """Add an event filter."""
-        self._event_filters.append(event_filter)
-        self._logger.debug("Added event filter")
-
-    def remove_filter(self, event_filter: EventFilter) -> bool:
-        """Remove an event filter."""
-        try:
-            self._event_filters.remove(event_filter)
-            self._logger.debug("Removed event filter")
-            return True
-        except ValueError:
-            return False
 
     def get_subscriptions(
         self, event_name: Optional[str] = None
@@ -325,7 +267,6 @@ class EventBus:
             )
             + len(self._global_subscriptions),
             "event_types": list(self._subscriptions.keys()),
-            "filter_count": len(self._event_filters),
             "history_size": len(self._event_history),
         }
 
@@ -432,23 +373,3 @@ def set_event_manager(manager: EventManager) -> None:
     """Set the global event manager instance."""
     global _global_event_manager
     _global_event_manager = manager
-
-
-# Convenience functions for the default event bus
-async def publish_event(
-    event_name: str, data: Any = None, source: Optional[str] = None
-) -> int:
-    """Publish an event to the default bus."""
-    return await get_event_manager().publish(event_name, data, source)
-
-
-def subscribe_to_event(
-    event_name: str, handler: EventHandler, **kwargs
-) -> EventSubscription:
-    """Subscribe to an event on the default bus."""
-    return get_event_manager().subscribe(event_name, handler, **kwargs)
-
-
-def unsubscribe_from_event(subscription: EventSubscription) -> bool:
-    """Unsubscribe from an event on the default bus."""
-    return get_event_manager().unsubscribe(subscription)
