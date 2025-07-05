@@ -6,6 +6,7 @@ the previous custom implementation with pydantic-settings for better
 reliability, validation, and environment variable handling.
 """
 
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -17,48 +18,41 @@ from pythonium.common.logging import get_logger
 logger = get_logger(__name__)
 
 
+class TransportType(str, Enum):
+    """Supported transport types."""
+
+    STDIO = "stdio"
+    HTTP = "http"
+    WEBSOCKET = "websocket"
+
+
+class AuthenticationMethod(str, Enum):
+    """Authentication methods."""
+
+    NONE = "none"
+    API_KEY = "api_key"
+
+
 class ServerSettings(BaseSettings):
     """Server configuration with environment variable support."""
 
     host: str = Field(default="localhost", description="Server host address")
     port: int = Field(default=8080, ge=1, le=65535, description="Server port")
-    transport: str = Field(
-        default="stdio",
+    transport: TransportType = Field(
+        default=TransportType.STDIO,
         description="Transport protocol (stdio, http, websocket)",
     )
     workers: int = Field(default=1, ge=1, description="Number of worker processes")
 
+    # MCP specific settings
+    name: str = Field(default="Pythonium MCP Server", description="Server name")
+    description: str = Field(
+        default="A modular MCP server for AI agents", description="Server description"
+    )
+    version: str = Field(default="0.1.2", description="Server version")
+
     model_config = SettingsConfigDict(
         env_prefix="PYTHONIUM_SERVER_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-    )
-
-    @field_validator("transport")
-    @classmethod
-    def validate_transport(cls, v: str) -> str:
-        """Validate transport protocol."""
-        allowed = ["stdio", "http", "websocket"]
-        if v not in allowed:
-            raise ValueError(f"Transport must be one of {allowed}")
-        return v
-
-
-class PluginSettings(BaseSettings):
-    """Plugin configuration with environment variable support."""
-
-    enabled: bool = Field(default=True, description="Enable plugin system")
-    auto_load: bool = Field(default=True, description="Auto-load plugins")
-    directories: List[str] = Field(
-        default_factory=lambda: ["plugins"], description="Plugin directories"
-    )
-    blacklist: List[str] = Field(
-        default_factory=list, description="Blacklisted plugins"
-    )
-
-    model_config = SettingsConfigDict(
-        env_prefix="PYTHONIUM_PLUGIN_",
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
@@ -78,6 +72,17 @@ class ToolSettings(BaseSettings):
         description="Enabled tool categories",
     )
 
+    # MCP specific tool settings
+    enable_tool_execution: bool = Field(
+        default=True, description="Enable tool execution"
+    )
+    tool_timeout_seconds: int = Field(
+        default=300, ge=1, description="Tool execution timeout"
+    )
+    max_tool_output_size_bytes: int = Field(
+        default=10 * 1024 * 1024, description="Max tool output size"
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="PYTHONIUM_TOOL_",
         env_file=".env",
@@ -85,42 +90,32 @@ class ToolSettings(BaseSettings):
         case_sensitive=False,
     )
 
+    @field_validator("tool_timeout_seconds")
+    @classmethod
+    def validate_tool_timeout(cls, v):
+        if v < 1:
+            raise ValueError("tool_timeout_seconds must be at least 1")
+        return v
+
 
 class LoggingSettings(BaseSettings):
     """Logging configuration with environment variable support."""
 
-    level: str = Field(default="INFO", description="Log level")
+    level: str = Field(default="INFO", description="Logging level")
     format: str = Field(
-        default="structured",
-        description="Log format (simple, detailed, json, structured)",
+        default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        description="Log format string",
     )
     file: Optional[str] = Field(default=None, description="Log file path")
-    verbose: bool = Field(default=False, description="Enable verbose logging")
+    max_size: int = Field(default=10485760, description="Max log file size")
+    backup_count: int = Field(default=5, description="Number of backup files")
 
     model_config = SettingsConfigDict(
-        env_prefix="PYTHONIUM_LOG_",
+        env_prefix="PYTHONIUM_LOGGING_",
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
-
-    @field_validator("level")
-    @classmethod
-    def validate_level(cls, v: str) -> str:
-        """Validate log level."""
-        allowed = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-        if v.upper() not in allowed:
-            raise ValueError(f"Log level must be one of {allowed}")
-        return v.upper()
-
-    @field_validator("format")
-    @classmethod
-    def validate_format(cls, v: str) -> str:
-        """Validate log format."""
-        allowed = ["simple", "detailed", "json", "structured"]
-        if v not in allowed:
-            raise ValueError(f"Log format must be one of {allowed}")
-        return v
 
 
 class SecuritySettings(BaseSettings):
@@ -134,12 +129,27 @@ class SecuritySettings(BaseSettings):
         default_factory=lambda: ["*"], description="Allowed CORS origins"
     )
 
+    # MCP specific security settings
+    authentication_method: AuthenticationMethod = Field(
+        default=AuthenticationMethod.NONE, description="Authentication method"
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="PYTHONIUM_SECURITY_",
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
+
+    @field_validator("api_keys")
+    @classmethod
+    def validate_api_keys(cls, v, info):
+        if (
+            info.data.get("authentication_method") == AuthenticationMethod.API_KEY
+            and not v
+        ):
+            raise ValueError("API keys required when using API key authentication")
+        return v
 
 
 class DatabaseSettings(BaseSettings):
@@ -187,7 +197,6 @@ class PythoniumSettings(BaseSettings):
 
     # Sub-configurations
     server: ServerSettings = Field(default_factory=ServerSettings)
-    plugins: PluginSettings = Field(default_factory=PluginSettings)
     tools: ToolSettings = Field(default_factory=ToolSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
@@ -198,6 +207,12 @@ class PythoniumSettings(BaseSettings):
     debug: bool = Field(default=False, description="Enable debug mode")
     environment: str = Field(default="development", description="Environment name")
     version: str = Field(default="1.0.0", description="Application version")
+
+    # MCP server specific settings
+    debug_mode: bool = Field(default=False, description="Enable MCP debug mode")
+    enable_experimental_features: bool = Field(
+        default=False, description="Enable experimental features"
+    )
 
     model_config = SettingsConfigDict(
         env_prefix="PYTHONIUM_",

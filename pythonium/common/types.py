@@ -43,7 +43,6 @@ class ComponentType(Enum):
 
     MANAGER = "manager"
     TOOL = "tool"
-    PLUGIN = "plugin"
     SERVER = "server"
     CLIENT = "client"
 
@@ -151,28 +150,6 @@ class Executable(Protocol):
 
 
 @runtime_checkable
-class Pluggable(Protocol):
-    """Protocol for plugin components."""
-
-    @property
-    @abstractmethod
-    def plugin_name(self) -> str:
-        """Plugin name."""
-        ...
-
-    @property
-    @abstractmethod
-    def plugin_version(self) -> str:
-        """Plugin version."""
-        ...
-
-    @abstractmethod
-    def get_dependencies(self) -> List[str]:
-        """Get plugin dependencies."""
-        ...
-
-
-@runtime_checkable
 class EventEmitter(Protocol):
     """Protocol for event emitting components."""
 
@@ -247,41 +224,6 @@ class Manager(Configurable, Initializable, HealthCheckable, Discoverable, Protoc
     @abstractmethod
     def manager_type(self) -> str:
         """Manager type identifier."""
-        ...
-
-
-@runtime_checkable
-class PluginManager(Manager, Protocol):
-    """Protocol for plugin managers."""
-
-    @abstractmethod
-    async def load_plugin(self, plugin_name: str) -> Pluggable:
-        """Load a plugin."""
-        ...
-
-    @abstractmethod
-    async def unload_plugin(self, plugin_name: str) -> None:
-        """Unload a plugin."""
-        ...
-
-    @abstractmethod
-    def list_plugins(self) -> List[str]:
-        """List available plugins."""
-        ...
-
-
-@runtime_checkable
-class ResourceManager(Manager, Protocol):
-    """Protocol for resource managers."""
-
-    @abstractmethod
-    async def acquire(self, resource_type: str, **kwargs) -> Any:
-        """Acquire a resource."""
-        ...
-
-    @abstractmethod
-    async def release(self, resource: Any) -> None:
-        """Release a resource."""
         ...
 
 
@@ -366,18 +308,6 @@ class EventData(NamedTuple):
     data: Any
     timestamp: datetime
     source: Optional[str] = None
-
-
-# Plugin system types
-class PluginInfo(NamedTuple):
-    """Plugin information."""
-
-    name: str
-    version: str
-    description: str
-    author: str
-    dependencies: List[str]
-    config_schema: Optional[Dict[str, Any]] = None
 
 
 # Tool system types

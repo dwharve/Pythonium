@@ -10,24 +10,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from pythonium.common.cache import CacheManager
-from pythonium.common.config import PluginSettings, PythoniumSettings, ServerSettings
+from pythonium.common.config import PythoniumSettings, ServerSettings
 from pythonium.common.events import EventManager
 from tests.conftest import BaseTestCase
-
-
-class TestCommonPackage(BaseTestCase):
-    """Test the common package initialization."""
-
-    def test_package_import(self):
-        """Test that the common package can be imported."""
-        # This will be implemented once we have actual modules
-        assert True  # Placeholder
-
-    def test_package_version(self):
-        """Test that the package has a version."""
-        from pythonium.common import __version__
-
-        assert __version__ == "0.1.2"
 
 
 class TestPythoniumSettings:
@@ -62,18 +47,12 @@ class TestPythoniumSettings:
         with pytest.raises(ValueError):
             ServerSettings(transport="invalid")
 
-    def test_plugin_settings(self):
-        """Test plugin configuration."""
-        settings = PluginSettings()
-        assert hasattr(settings, "model_config")
-
     def test_full_settings_integration(self):
         """Test full settings integration."""
         settings = PythoniumSettings()
 
         # Verify all main sections exist
         assert hasattr(settings, "server")
-        assert hasattr(settings, "plugins")
         assert hasattr(settings, "tools")
         assert hasattr(settings, "logging")
         assert hasattr(settings, "security")
@@ -430,7 +409,6 @@ class TestConfigurationIntegration:
 
         # All main sections should be accessible
         assert hasattr(settings, "server")
-        assert hasattr(settings, "plugins")
         assert hasattr(settings, "tools")
         assert hasattr(settings, "logging")
         assert hasattr(settings, "security")

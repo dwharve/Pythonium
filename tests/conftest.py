@@ -18,7 +18,7 @@ from pydantic import BaseModel
 @pytest.fixture
 def mock_tool_registry():
     """Create a mock tool registry."""
-    from pythonium.managers.tools import ToolRegistry
+    from pythonium.core.tools import ToolRegistry
 
     registry = Mock(spec=ToolRegistry)
     registry.get_all_tools = Mock(return_value=[])
@@ -27,19 +27,6 @@ def mock_tool_registry():
     registry.unregister_tool = Mock()
 
     return registry
-
-
-@pytest.fixture
-def mock_security_manager():
-    """Create a mock security manager."""
-    from pythonium.managers.security_manager import SecurityManager
-
-    security = Mock(spec=SecurityManager)
-    security.validate_request = Mock(return_value=True)
-    security.check_permissions = Mock(return_value=True)
-    security.sanitize_input = Mock(side_effect=lambda x: x)
-
-    return security
 
 
 @pytest.fixture
@@ -228,7 +215,6 @@ def sample_config() -> Dict[str, Any]:
     """Provide sample configuration data."""
     return {
         "server": {"host": "localhost", "port": 8080, "transport": "stdio"},
-        "plugins": {"auto_discover": True, "plugin_dirs": ["plugins"]},
         "tools": {"categories": ["filesystem", "network", "system"]},
         "logging": {"level": "INFO", "format": "structured"},
     }

@@ -22,35 +22,6 @@ class TestServerPerformance:
         """Set up test environment."""
         self.tmp_path = tmp_path
 
-    @pytest.mark.asyncio
-    async def test_startup_time(self):
-        """Test server startup time."""
-        # This will be implemented when we have the MCP server
-        start_time = time.time()
-        # TODO: Start server
-        startup_time = time.time() - start_time
-
-        # Server should start within 5 seconds
-        assert startup_time < 5.0
-
-    @pytest.mark.asyncio
-    async def test_tool_execution_latency(self):
-        """Test tool execution latency."""
-        # This will be implemented when we have tools
-        assert True  # Placeholder
-
-    @pytest.mark.asyncio
-    async def test_concurrent_requests(self):
-        """Test handling of concurrent requests."""
-        # This will be implemented when we have the MCP server
-        assert True  # Placeholder
-
-    @pytest.mark.asyncio
-    async def test_memory_usage(self):
-        """Test memory usage under load."""
-        # This will be implemented when we have the MCP server
-        assert True  # Placeholder
-
 
 @pytest.mark.performance
 class TestToolPerformance:
@@ -60,18 +31,6 @@ class TestToolPerformance:
     def setup_test(self, tmp_path):
         """Set up test environment."""
         self.tmp_path = tmp_path
-
-    @pytest.mark.asyncio
-    async def test_file_operation_performance(self):
-        """Test performance of file operations."""
-        # This will be implemented when we have file tools
-        assert True  # Placeholder
-
-    @pytest.mark.asyncio
-    async def test_network_operation_performance(self):
-        """Test performance of network operations."""
-        # This will be implemented when we have network tools
-        assert True  # Placeholder
 
 
 class PerformanceMetrics:

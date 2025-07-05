@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import (
-    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -35,9 +34,6 @@ from pythonium.common.lifecycle import ComponentState
 from pythonium.common.logging import get_logger
 from pythonium.common.types import HealthStatus, MetadataDict
 
-if TYPE_CHECKING:
-    from pythonium.managers.config_manager import ConfigurationManager
-
 logger = get_logger(__name__)
 
 T = TypeVar("T")
@@ -48,7 +44,7 @@ class ManagerPriority(Enum):
 
     CRITICAL = 0  # Core system managers (e.g., configuration, logging)
     HIGH = 10  # Essential managers (e.g., security, events)
-    NORMAL = 50  # Standard managers (e.g., plugins, tools)
+    NORMAL = 50  # Standard managers (e.g., tools, config)
     LOW = 100  # Optional managers (e.g., metrics, monitoring)
 
 
@@ -134,7 +130,6 @@ class BaseManager(BaseComponent, ABC):
         self._health_checks: Dict[str, HealthCheck] = {}
         self._settings: Optional[PythoniumSettings] = None
         self._event_manager: Optional[EventManager] = None
-        self._config_manager: Optional["ConfigurationManager"] = None
         self._shutdown_callbacks: List[Callable[[], None]] = []
         self._lock = asyncio.Lock()
 
@@ -454,17 +449,21 @@ class BaseManager(BaseComponent, ABC):
     # Configuration access
 
     def get_config(self, key: str, default: Any = None) -> Any:
-        """Get configuration value."""
-        if self._config_manager:
-            return self._config_manager.get(
-                f"managers.{self._info.name}.{key}", default
-            )
+        """Get configuration value from settings."""
+        if self._settings:
+            # Try to get from the settings object using attribute access
+            try:
+                manager_key = f"managers_{self._info.name}_{key}".replace(".", "_")
+                return getattr(self._settings, manager_key, default)
+            except AttributeError:
+                pass
         return default
 
     def set_config(self, key: str, value: Any) -> None:
-        """Set configuration value."""
-        if self._config_manager:
-            self._config_manager.set(f"managers.{self._info.name}.{key}", value)
+        """Set configuration value (not supported in this implementation)."""
+        # Configuration setting is not supported in this simplified implementation
+        # In a full implementation, this would use a configuration manager
+        logger.warning(f"Setting configuration not supported: {key}={value}")
 
     # Event handling
 
@@ -506,6 +505,7 @@ class ConfigurableManager(BaseManager):
     def __init__(self, name: str, version: str = "1.0.0", description: str = ""):
         super().__init__(name, version, description)
         self._config_section = f"managers.{name}"
+        self._config_manager: Optional[Any] = None
 
     def get_manager_config(
         self, default: Optional[Dict[str, Any]] = None

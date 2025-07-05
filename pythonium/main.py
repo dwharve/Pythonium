@@ -18,7 +18,7 @@ from rich.console import Console
 __version__ = importlib.metadata.version("pythonium")
 
 from .common.logging import get_logger, setup_logging
-from .mcp_server import PythoniumMCPServer
+from .core.server import PythoniumMCPServer
 
 console = Console()
 logger = get_logger(__name__)

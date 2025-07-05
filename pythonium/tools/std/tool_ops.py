@@ -11,7 +11,7 @@ from pythonium.common.base import Result
 from pythonium.common.error_handling import handle_tool_error
 from pythonium.common.exceptions import ToolExecutionError
 from pythonium.common.parameter_validation import validate_parameters
-from pythonium.managers.tools.registry import ToolRegistry
+from pythonium.core.tools.registry import ToolRegistry
 from pythonium.tools.base import (
     BaseTool,
     ParameterType,
@@ -32,7 +32,6 @@ class DescribeToolTool(BaseTool):
             name="describe_tool",
             description="Get detailed information about any tool in the system to understand its purpose, parameters, usage patterns, and examples. Essential for discovering tool capabilities, understanding parameter requirements, and getting help on how to use specific tools effectively.",
             brief_description="Get detailed information about any tool in the system",
-            detailed_description="Get comprehensive information about any tool including its description, parameters with types and constraints, usage examples, and metadata. Takes 'tool_name' (required) to specify which tool to describe, 'include_examples' (boolean) to include usage examples, 'include_schema' (boolean) to include detailed parameter schema, and 'include_metadata' (boolean) for comprehensive metadata. Essential for tool discovery, understanding capabilities, and learning proper usage patterns.",
             category="tools",
             tags=[
                 "describe",
@@ -217,7 +216,6 @@ class DescribeToolTool(BaseTool):
                         tool_info = {
                             "description": registration.metadata.description,
                             "brief_description": registration.metadata.brief_description,
-                            "detailed_description": registration.metadata.detailed_description,
                             "category": registration.metadata.category,
                             "tags": registration.metadata.tags,
                             "version": registration.metadata.version,
@@ -264,7 +262,7 @@ class DescribeToolTool(BaseTool):
                 metadata_info = {
                     "version": tool_info.get("version", "unknown"),
                     "dangerous": tool_info.get("dangerous", False),
-                    "full_description": tool_info.get("detailed_description", ""),
+                    "full_description": tool_info.get("description", ""),
                 }
                 result_data["metadata"] = metadata_info
 
@@ -291,7 +289,6 @@ class SearchToolsTool(BaseTool):
             name="search_tools",
             description="Search and discover tools in the system based on keywords, categories, tags, or functionality. Perfect for finding the right tool for a task, exploring available capabilities, or discovering new tools that might be useful for specific problems.",
             brief_description="Search and discover tools in the system",
-            detailed_description="Search and discover tools in the system based on keywords, categories, tags, or functionality. Takes 'query' (required) for keyword search, 'category' (optional) to filter by tool category, 'tags' (optional array) to filter by specific tags, 'include_description' (boolean) to include tool descriptions, 'include_parameters' (boolean) to include parameter information, and 'limit' (optional) to restrict number of results. Perfect for tool discovery and finding the right tool for specific tasks.",
             category="tools",
             tags=[
                 "search",
@@ -355,7 +352,7 @@ class SearchToolsTool(BaseTool):
                 and hasattr(context, "registry")
                 and context.registry is not None
             ):
-                return context.registry  # type: ignore
+                return context.registry
 
             # If no context registry available, return None to indicate error
             return None

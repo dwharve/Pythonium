@@ -24,7 +24,7 @@ class TestSearchToolsTool:
         """Create a ToolContext instance for testing."""
         from datetime import datetime
 
-        from pythonium.managers.tools.registry import ToolRegistration, ToolStatus
+        from pythonium.core.tools.registry import ToolRegistration, ToolStatus
         from pythonium.tools.base import ToolMetadata
 
         # Create mock registry with some tools

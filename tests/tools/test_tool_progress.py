@@ -11,12 +11,11 @@ import pytest
 
 from pythonium.common.parameter_validation import (
     ExecuteCommandParams,
-    FindFilesParams,
-    SearchTextParams,
 )
 from pythonium.tools.base import ToolContext
-from pythonium.tools.filesystem.search import FindFilesTool, SearchFilesTool
+from pythonium.tools.std import FindFilesTool, SearchFilesTool
 from pythonium.tools.std.execution import ExecuteCommandTool
+from pythonium.tools.std.parameters import FindFilesParams, SearchTextParams
 
 
 class TestToolProgressNotifications:
@@ -191,7 +190,9 @@ class TestToolProgressNotifications:
         assert len(start_messages) > 0
 
         executing_messages = [
-            msg for msg in progress_messages if "Executing command" in msg
+            msg
+            for msg in progress_messages
+            if "Creating subprocess" in msg or "Process started" in msg
         ]
         assert len(executing_messages) > 0
 

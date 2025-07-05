@@ -57,36 +57,6 @@ class LifecycleError(PythoniumError):
     pass
 
 
-class PluginError(PythoniumError):
-    """Base exception for plugin-related errors."""
-
-    pass
-
-
-class PluginNotFoundError(PluginError):
-    """Raised when a plugin cannot be found."""
-
-    pass
-
-
-class PluginLoadError(PluginError):
-    """Raised when a plugin fails to load."""
-
-    pass
-
-
-class PluginDependencyError(PluginError):
-    """Raised when plugin dependencies cannot be resolved."""
-
-    pass
-
-
-class PluginExecutionError(PluginError):
-    """Raised when plugin execution fails."""
-
-    pass
-
-
 class ToolError(PythoniumError):
     """Base exception for tool-related errors."""
 
@@ -153,54 +123,6 @@ class MCPClientError(MCPError):
     pass
 
 
-class ResourceError(PythoniumError):
-    """Base exception for resource-related errors."""
-
-    pass
-
-
-class ResourceNotFoundError(ResourceError):
-    """Raised when a resource cannot be found."""
-
-    pass
-
-
-class ResourceAccessError(ResourceError):
-    """Raised when resource access is denied."""
-
-    pass
-
-
-class ResourceExhaustedError(ResourceError):
-    """Raised when resources are exhausted."""
-
-    pass
-
-
-class SecurityError(PythoniumError):
-    """Base exception for security-related errors."""
-
-    pass
-
-
-class AuthenticationError(SecurityError):
-    """Raised when authentication fails."""
-
-    pass
-
-
-class AuthorizationError(SecurityError):
-    """Raised when authorization fails."""
-
-    pass
-
-
-class RateLimitError(SecurityError):
-    """Raised when rate limits are exceeded."""
-
-    pass
-
-
 class ValidationError(PythoniumError):
     """Raised when data validation fails."""
 
@@ -228,9 +150,6 @@ def handle_exception(exc: Exception, context: str = "") -> PythoniumError:
     exception_mapping = {
         ValueError: ValidationError,
         TypeError: ValidationError,
-        KeyError: ResourceNotFoundError,
-        FileNotFoundError: ResourceNotFoundError,
-        PermissionError: ResourceAccessError,
         ConnectionError: NetworkError,
         asyncio.TimeoutError: TimeoutError,
     }

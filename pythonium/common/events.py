@@ -1,8 +1,8 @@
 """
-Event system for inter-plugin communication in the Pythonium framework.
+Event system for inter-component communication in the Pythonium framework.
 
-This module provides a comprehensive event system that allows plugins
-and components to communicate through events and listeners.
+This module provides a comprehensive event system that allows components
+to communicate through events and listeners.
 """
 
 import asyncio
