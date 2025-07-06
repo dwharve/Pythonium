@@ -136,8 +136,11 @@ def _build_mcp_config(python_path: str) -> dict:
     """Build MCP server configuration for pythonium."""
     return {
         "name": "pythonium",
-        "command": [python_path, "-m", "pythonium", "serve"],
-        "args": ["--transport", "stdio"],
+        "command": [python_path],
+        "args": [
+            "-m", "pythonium", "--log-level", "WARNING", "serve", 
+            "--transport", "stdio"
+        ],
         "cwd": str(Path.home()),
         "auto_start": True,
         "description": "Pythonium MCP server for Python code analysis and execution",
