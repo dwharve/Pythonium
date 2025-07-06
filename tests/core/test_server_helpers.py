@@ -70,7 +70,7 @@ async def test_run_http_and_ws():
     server.stop = AsyncMock()
     server.mcp_server.run = Mock()
 
-    async def mock_run_in_executor(executor, func, *args):
+    async def mock_run_in_executor(_executor, func, *args):
         func(*args)
 
     with patch("asyncio.get_event_loop") as mock_loop:

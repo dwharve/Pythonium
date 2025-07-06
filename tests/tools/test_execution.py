@@ -2,8 +2,6 @@
 
 from unittest.mock import Mock, patch
 
-import pytest
-
 from pythonium.tools.std.execution import ExecuteCommandTool
 
 

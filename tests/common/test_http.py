@@ -2,7 +2,6 @@
 Tests for HTTP service - Fixed and optimized version.
 """
 
-import asyncio
 import json
 from unittest.mock import AsyncMock, Mock, patch
 

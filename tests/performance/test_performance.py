@@ -5,9 +5,7 @@ These tests measure and verify the performance characteristics
 of the MCP server under various load conditions.
 """
 
-import asyncio
 import time
-from typing import List
 
 import pytest
 

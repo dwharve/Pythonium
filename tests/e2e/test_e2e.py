@@ -7,8 +7,6 @@ from a client perspective, testing the full request-response cycle.
 
 import pytest
 
-from tests.conftest import AsyncTestCase
-
 
 @pytest.mark.e2e
 class TestMCPServerE2E:

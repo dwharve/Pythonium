@@ -71,7 +71,6 @@ class BaseComponent(ABC):
         self.status = ComponentStatus.UNINITIALIZED
         self.created_at = datetime.utcnow()
         self.last_error: Optional[Exception] = None
-        self._initialization_lock = asyncio.Lock()
 
     @abstractmethod
     async def initialize(self) -> None:
@@ -109,9 +108,6 @@ class Result(BaseModel, Generic[T]):
     )
     execution_time: Optional[float] = Field(
         default=None, description="Execution time in seconds"
-    )
-    timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="Result timestamp"
     )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)

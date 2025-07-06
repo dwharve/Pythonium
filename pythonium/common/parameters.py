@@ -28,14 +28,7 @@ class ParameterModel(BaseModel):
         arbitrary_types_allowed=True,
     )
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        return self.model_dump(exclude_unset=True)
 
-    @classmethod
-    def get_parameter_names(cls) -> List[str]:
-        """Get list of parameter names."""
-        return list(cls.model_fields.keys())
 
 
 def validate_parameters(parameter_model: Type[ParameterModel]):

@@ -2,7 +2,6 @@
 Tests for error handling module.
 """
 
-import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -387,4 +386,5 @@ class TestErrorHandlingIntegration:
         failure_params = {"should_fail": True}
         result = await mock_tool_execute(failure_params, mock_context)
         assert result.success is False
+        assert result.error is not None
         assert "Simulated tool failure" in result.error

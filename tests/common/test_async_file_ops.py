@@ -2,7 +2,6 @@
 Tests for async file operations.
 """
 
-import asyncio
 import tempfile
 from pathlib import Path
 
