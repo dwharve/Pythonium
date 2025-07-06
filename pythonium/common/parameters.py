@@ -7,7 +7,7 @@ consistency.
 """
 
 import functools
-from typing import Any, Callable, Dict, List, Type, TypeVar
+from typing import Any, Callable, Dict, Type, TypeVar
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -27,8 +27,6 @@ class ParameterModel(BaseModel):
         validate_assignment=True,
         arbitrary_types_allowed=True,
     )
-
-
 
 
 def validate_parameters(parameter_model: Type[ParameterModel]):

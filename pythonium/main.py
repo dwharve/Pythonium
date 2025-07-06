@@ -138,8 +138,13 @@ def _build_mcp_config(python_path: str) -> dict:
         "name": "pythonium",
         "command": [python_path],
         "args": [
-            "-m", "pythonium", "--log-level", "WARNING", "serve", 
-            "--transport", "stdio"
+            "-m",
+            "pythonium",
+            "--log-level",
+            "WARNING",
+            "serve",
+            "--transport",
+            "stdio",
         ],
         "cwd": str(Path.home()),
         "auto_start": True,
