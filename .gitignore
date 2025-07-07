@@ -1,5 +1,5 @@
-
 __pycache__/
+node_modules/
 .mypy_cache/
 htmlcov/
 .pytest_cache/

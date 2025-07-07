@@ -244,7 +244,7 @@ class ExecuteCommandTool(BaseTool):
         self._running_processes[process_id] = process
 
         if progress_callback:
-            progress_callback(f"📊 Process started (PID: {process.pid})")
+            progress_callback(f"Process started (PID: {process.pid})")
 
         try:
             return await self._handle_subprocess_execution(process, parameters)
@@ -406,9 +406,9 @@ class ExecuteCommandTool(BaseTool):
 
         # Enhanced progress reporting
         if progress_callback:
-            status_emoji = "✅" if returncode == 0 else "❌"
+            status_text = "SUCCESS" if returncode == 0 else "FAILED"
             progress_callback(
-                f"{status_emoji} Command completed in {execution_time:.2f}s "
+                f"{status_text} Command completed in {execution_time:.2f}s "
                 f"(PID: {pid}, exit code: {returncode})"
             )
 

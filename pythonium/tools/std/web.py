@@ -1074,25 +1074,28 @@ class HttpClientTool(BaseTool):
         """Process and enhance response data with additional information."""
         import json
 
-        processed_response = {"data": response_data, "metadata": metadata}
+        # Optimize content if it's HTML/script to minimize token usage
+        optimized_data = self._optimize_content(response_data, metadata)
+        
+        processed_response = {"data": optimized_data, "metadata": metadata}
 
         # Add response analysis
-        if isinstance(response_data, dict):
+        if isinstance(optimized_data, dict):
             processed_response["response_type"] = "json"
-            processed_response["data_size"] = len(str(response_data))
-        elif isinstance(response_data, str):
+            processed_response["data_size"] = len(str(optimized_data))
+        elif isinstance(optimized_data, str):
             processed_response["response_type"] = "text"
-            processed_response["data_size"] = len(response_data)
+            processed_response["data_size"] = len(optimized_data)
 
             # Try to detect if it's JSON in string format
             try:
-                json.loads(response_data)
+                json.loads(optimized_data)
                 processed_response["response_type"] = "json_string"
             except (json.JSONDecodeError, TypeError):
                 pass
         else:
             processed_response["response_type"] = "other"
-            processed_response["data_size"] = len(str(response_data))
+            processed_response["data_size"] = len(str(optimized_data))
 
         # Extract useful metadata
         if metadata:
@@ -1111,6 +1114,67 @@ class HttpClientTool(BaseTool):
                 processed_response["content_length"] = headers.get("content-length")
 
         return processed_response
+
+    def _optimize_content(self, response_data: Any, metadata: Dict[str, Any]) -> Any:
+        """Optimize content to minimize token usage for HTML/script content."""
+        if not isinstance(response_data, str):
+            return response_data
+            
+        # Check content type from metadata
+        content_type = ""
+        if metadata and "headers" in metadata:
+            content_type = metadata["headers"].get("content-type", "").lower()
+        
+        # If it's HTML content, parse and extract meaningful text
+        if ("text/html" in content_type or 
+            response_data.strip().startswith("<!DOCTYPE html") or
+            response_data.strip().startswith("<html")):
+            
+            try:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(response_data, 'html.parser')
+                
+                # Remove script, style, nav, footer, and other non-content elements
+                for element in soup(["script", "style", "nav", "footer", "header", 
+                                   "aside", "iframe", "noscript", "link", "meta"]):
+                    element.decompose()
+                
+                # Extract main content areas preferentially
+                main_content = (
+                    soup.find("main") or 
+                    soup.find("article") or 
+                    soup.find("div", class_=re.compile(r"content|main|body", re.I)) or
+                    soup.find("body") or
+                    soup
+                )
+                
+                # Get text content and clean it up
+                text = main_content.get_text(separator='\n', strip=True)
+                
+                # Clean up excessive whitespace
+                lines = [line.strip() for line in text.split('\n') if line.strip()]
+                cleaned_text = '\n'.join(lines)
+                
+                # Truncate if still too long (roughly 2000 tokens = 8000 chars)
+                if len(cleaned_text) > 8000:
+                    cleaned_text = cleaned_text[:8000] + "... [Content truncated for token optimization]"
+                
+                return cleaned_text
+                
+            except Exception:
+                # If parsing fails, fall back to truncation
+                pass
+        
+        # For JavaScript/CSS or other text content, truncate heavily
+        elif ("javascript" in content_type or "css" in content_type or 
+              response_data.strip().startswith(("function", "var ", "const ", "let "))):
+            return f"[JavaScript/CSS content - {len(response_data)} characters] [Content minimized for token optimization]"
+        
+        # For very long text content, truncate
+        if len(response_data) > 8000:
+            return response_data[:8000] + "... [Content truncated for token optimization]"
+        
+        return response_data
 
     def _get_status_category(self, status_code: int) -> str:
         """Get the category of HTTP status code."""

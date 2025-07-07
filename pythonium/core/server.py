@@ -250,7 +250,11 @@ class PythoniumMCPServer:
                     return ""
 
             except Exception as e:
-                logger.error(f"Error executing tool {tool_instance.metadata.name}: {e}")
+                # Log only a concise error message without full content
+                error_str = str(e)
+                if len(error_str) > 100:
+                    error_str = error_str[:100] + "..."
+                logger.error(f"Error executing tool {tool_instance.metadata.name}: {error_str}")
                 raise
 
         # Set function attributes

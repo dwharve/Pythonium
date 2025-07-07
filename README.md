@@ -1,45 +1,46 @@
 # Pythonium
 
-A modular Model Context Protocol (MCP) server designed to enable advanced capabilities for AI agents through a comprehensive plugin-based architecture.
+A modular Model Context Protocol (MCP) server designed to enable advanced capabilities for AI agents through a robust, extensible architecture built on the official MCP SDK.
 
 ## Overview
 
-Pythonium provides a robust, extensible foundation for building sophisticated AI agent tools and capabilities. Built around the Model Context Protocol specification, it offers a clean separation of concerns through its modular package structure.
+Pythonium provides a comprehensive, production-ready foundation for building sophisticated AI agent tools and capabilities. Built around the Model Context Protocol specification and leveraging the official MCP SDK (FastMCP), it offers a clean separation of concerns through its modular package structure and streamlined configuration management.
 
 ## Architecture
 
 ### Core Packages
 
-- **`pythonium.common`** - Shared utilities, base classes, and plugin framework foundation
-- **`pythonium.managers`** - Object-oriented management systems for configuration, plugins, resources, and security
-- **`pythonium.tools`** - Comprehensive tool management system with plugin framework
-- **`pythonium.mcp`** - Full-featured MCP server implementation with configuration management
+- **`pythonium.common`** - Shared utilities, configuration management, and base components
+- **`pythonium.core`** - Central server implementation, configuration, and tool management
+- **`pythonium.tools`** - Comprehensive standard tool library with extensible framework
+- **`pythonium.managers`** - Lightweight management systems for specialized functionality
 
 ## Features
 
-### Plugin Framework
-- Dynamic plugin discovery and loading
-- Dependency resolution and lifecycle management
-- Plugin isolation and sandboxing
-- Extensible tool and manager registration
-
-### Tool Categories
-- **File System**: File operations, directory management, content analysis (`pythonium.tools.filesystem`)
-- **Network**: HTTP operations, API interactions, web scraping (`pythonium.tools.network`)
-- **System**: Process management, environment access, monitoring (`pythonium.tools.system`)
-
-### Management Systems
-- **Configuration**: Multi-format config loading with hot-reload
-- **Plugin**: Dynamic plugin lifecycle and dependency management
-- **Resource**: Memory, connection pooling, and resource monitoring
-- **Security**: Authentication, authorization, rate limiting, audit logging
-
-### MCP Server
+### MCP SDK Integration
+- Built on the official MCP SDK's FastMCP framework
 - Full Model Context Protocol compliance
-- Multiple transport options (stdio, HTTP, WebSocket)
-- Tool registration and capability negotiation
-- Resource management and streaming
-- Prompt template system
+- Multiple transport support (stdio, HTTP, WebSocket)
+- Native tool registration and capability negotiation
+
+### Comprehensive Tool Library
+- **System Operations**: Command execution, environment access, system monitoring (`pythonium.tools.std.execution`)
+- **File Operations**: Advanced file and directory management (`pythonium.tools.std.file_ops`)
+- **Web Operations**: HTTP client, web search with multiple engines (`pythonium.tools.std.web`)
+- **Tool Management**: Meta-tools for tool discovery and introspection (`pythonium.tools.std.tool_ops`)
+
+### Advanced Configuration
+- Pydantic-based configuration with validation
+- Environment variable integration
+- Multiple format support (YAML, JSON, TOML)
+- Hot-reload capability and override support
+
+### Production Features
+- Structured logging with multiple output formats
+- Comprehensive error handling and recovery
+- Resource management and connection pooling
+- Security considerations and rate limiting
+- Performance optimizations with async architecture
 
 ## Quick Start
 
@@ -67,17 +68,17 @@ pip install -e .
 # Run the MCP server
 python -m pythonium --help
 
-# Start with default configuration
+# Start with default configuration (stdio transport)
 python -m pythonium serve
 
-# Start with custom configuration
+# Start with HTTP transport
+python -m pythonium serve --transport http --host localhost --port 8080
+
+# Start with WebSocket transport
+python -m pythonium serve --transport websocket --host localhost --port 8080
+
+# Start with custom configuration file
 python -m pythonium serve --config config/server.yaml
-
-# List available tools
-python -m pythonium tools list
-
-# Show server status
-python -m pythonium status
 
 # Alternative: Use installed script
 pythonium --help
@@ -114,107 +115,144 @@ mypy pythonium
 ```
 pythonium/
 ├── pythonium/           # Main package
-│   ├── common/         # Shared utilities and plugin framework
-│   ├── managers/       # Management systems
+│   ├── common/         # Shared utilities and base components
+│   │   ├── config.py   # Pydantic configuration management
+│   │   ├── base.py     # Base classes and result types
+│   │   ├── logging.py  # Structured logging system
+│   │   └── ...         # HTTP client, error handling, etc.
+│   ├── core/           # Core server and management
+│   │   ├── server.py   # Main MCP server implementation
+│   │   ├── config.py   # Configuration manager
+│   │   └── tools/      # Tool registry and discovery
 │   ├── tools/          # Tool implementations
-│   ├── mcp/           # MCP server implementation
-│   └── __main__.py    # Module entry point
-├── tests/              # Test suite
+│   │   ├── base.py     # Base tool framework
+│   │   └── std/        # Standard tool library
+│   ├── managers/       # Specialized managers
+│   ├── main.py         # CLI entry point
+│   └── __main__.py     # Module entry point
+├── tests/              # Comprehensive test suite (238 tests)
 ├── docs/               # Documentation
-├── config/             # Configuration files
+├── config/             # Configuration examples
 └── requirements.txt    # Dependencies
 ```
 
 ### Testing
 
-The project uses pytest for testing with comprehensive coverage:
+The project uses pytest for testing with comprehensive coverage across all components:
 
-- **Unit Tests**: Individual component testing (78 total tests)
-- **Integration Tests**: Package interaction testing  
+- **Unit Tests**: Individual component testing 
+- **Integration Tests**: Cross-component interaction testing  
+- **Core Tests**: Configuration, server, and tool management
 - **End-to-End Tests**: Full MCP server functionality
-- **Performance Tests**: Load and performance testing
+- **Performance Tests**: Load testing and benchmarks
 
-**Current Status**: 77 tests passing, 1 test failing (dependency injection issue in manager integration)
+**Current Status**: 238 tests with robust coverage across all modules
 
 ```bash
 # Run all tests
 pytest
 
-# Run specific test category
-pytest -m unit
-pytest -m integration
+# Run with coverage reporting
+pytest --cov=pythonium --cov-report=html
 
-# Run with coverage
-pytest --cov=pythonium --cov-report=term-missing
+# Run specific test categories
+pytest tests/core/         # Core functionality tests
+pytest tests/tools/        # Tool implementation tests
+pytest tests/common/       # Common utilities tests
 
 # Quick test run
 pytest -q
+
+# Verbose test output
+pytest -v
 ```
 
 ## Configuration
 
-Pythonium supports multiple configuration formats (YAML, JSON, TOML) with environment variable integration:
+Pythonium uses Pydantic-based configuration with support for multiple formats (YAML, JSON, TOML) and environment variable integration:
 
 ```yaml
 # config/server.yaml
 server:
+  name: "Pythonium MCP Server"
+  description: "A modular MCP server for AI agents"
   host: "localhost"
   port: 8080
   transport: "stdio"  # stdio, http, websocket
 
-plugins:
-  auto_discover: true
-  plugin_dirs:
-    - "plugins"
-    - "~/.pythonium/plugins"
-
 tools:
+  # Tool discovery and loading configuration
+  auto_discover: true
   categories:
-    - filesystem
-    - network
-    - system
+    - "system"
+    - "web"
+    - "file_operations"
 
 logging:
-  level: "INFO"
-  format: "structured"
+  level: "INFO"           # DEBUG, INFO, WARNING, ERROR
+  format: "structured"    # structured, plain
+  output: "console"       # console, file
+
+security:
+  authentication: "none"  # none, api_key
+  rate_limit:
+    enabled: false
+    requests_per_minute: 60
 ```
 
-## Plugin Development
+## Tool Development
 
-### Creating a Tool Plugin
+### Creating a Custom Tool
 
 ```python
-from pythonium.tools.base import BaseTool
-from pythonium.common.types import ToolResult
+from pythonium.tools.base import BaseTool, ToolMetadata, ToolParameter, ParameterType
+from pythonium.common.base import Result
+from pythonium.common.parameters import validate_parameters
 
 class MyCustomTool(BaseTool):
-    name = "my_custom_tool"
-    description = "A custom tool example"
+    """A custom tool example with proper parameter validation."""
     
-    async def execute(self, **kwargs) -> ToolResult:
-        # Implementation here
-        return ToolResult(
-            success=True,
-            data={"result": "Hello from custom tool!"}
+    @property
+    def metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            name="my_custom_tool",
+            description="A custom tool example that demonstrates the framework",
+            brief_description="Custom tool example",
+            category="custom",
+            tags=["example", "custom"],
+            parameters=[
+                ToolParameter(
+                    name="message",
+                    type=ParameterType.STRING,
+                    description="Message to process",
+                    required=True,
+                    min_length=1,
+                    max_length=1000
+                )
+            ]
         )
+    
+    @validate_parameters  # Automatic parameter validation
+    async def execute(self, message: str, context: ToolContext) -> Result:
+        """Execute the tool with validated parameters."""
+        try:
+            result = f"Processed: {message}"
+            return Result.success_result(
+                data={"result": result, "original": message},
+                metadata={"tool": "my_custom_tool"}
+            )
+        except Exception as e:
+            return Result.error_result(f"Tool execution failed: {e}")
 ```
 
-### Creating a Manager Plugin
+### Tool Registration
 
-```python
-from pythonium.managers.base import BaseManager
+Tools are automatically discovered and registered when placed in the appropriate package structure. The tool discovery system handles:
 
-class MyCustomManager(BaseManager):
-    name = "custom_manager"
-    
-    async def initialize(self):
-        # Initialize manager
-        pass
-    
-    async def shutdown(self):
-        # Cleanup manager
-        pass
-```
+- Automatic tool detection and registration
+- Parameter validation and schema generation
+- Error handling and logging
+- Integration with the MCP protocol
 
 ## Contributing
 
@@ -234,10 +272,12 @@ For a detailed history of changes, see [CHANGELOG.md](CHANGELOG.md).
 ### Code Standards
 
 - Follow PEP 8 style guidelines
-- Use type hints throughout
-- Maintain test coverage above 90%
-- Document all public APIs
+- Use type hints throughout the codebase
+- Maintain comprehensive test coverage
+- Document all public APIs with detailed docstrings
 - Use conventional commit messages
+- Leverage Pydantic for data validation and configuration
+- Implement proper async/await patterns for I/O operations
 
 ## License
 
@@ -245,20 +285,21 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- **Documentation**: [https://pythonium.readthedocs.io/](https://pythonium.readthedocs.io/)
+- **Documentation**: Available in the `docs/` directory
 - **Issues**: [GitHub Issues](https://github.com/dwharve/pythonium/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/dwharve/pythonium/discussions)
 
 ## Acknowledgments
 
-- Model Context Protocol specification
+- Official Model Context Protocol SDK and specification
 - The open-source Python community
+- Pydantic and FastAPI ecosystems for configuration and validation patterns
 - Contributors and maintainers
 
 ---
 
-**Status**: Beta - Core functionality implemented, under active development with known issues being addressed
+**Status**: Production-ready Beta - Core functionality stable, comprehensive test coverage, active development
 
-**Current Version**: 0.1.1  
-**Last Updated**: June 30, 2025  
+**Current Version**: 0.1.4  
+**Last Updated**: July 6, 2025  
 **Maintainer**: David Harvey
