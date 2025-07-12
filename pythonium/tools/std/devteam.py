@@ -9,19 +9,21 @@ import asyncio
 import uuid
 from typing import Any, Dict, List, Optional
 
-from pythonium.tools.base import BaseTool, ToolMetadata, ToolParameter, ParameterType
 from pythonium.common.base import Result
-from pythonium.common.parameters import validate_parameters
 from pythonium.common.events import get_event_manager
+from pythonium.common.parameters import validate_parameters
 from pythonium.managers.devteam_events import (
-    TaskType, TaskPriority, DevTeamEvents,
-    create_task_submission_event
+    DevTeamEvents,
+    TaskPriority,
+    TaskType,
+    create_task_submission_event,
 )
+from pythonium.tools.base import BaseTool, ParameterType, ToolMetadata, ToolParameter
 
 
 class DevTeamTaskSubmissionTool(BaseTool):
     """Tool for submitting development tasks to the DevTeam Manager."""
-    
+
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
@@ -37,7 +39,7 @@ class DevTeamTaskSubmissionTool(BaseTool):
                     description="Brief title for the development task",
                     required=True,
                     min_length=5,
-                    max_length=100
+                    max_length=100,
                 ),
                 ToolParameter(
                     name="description",
@@ -45,14 +47,23 @@ class DevTeamTaskSubmissionTool(BaseTool):
                     description="Detailed description of what needs to be developed",
                     required=True,
                     min_length=10,
-                    max_length=2000
+                    max_length=2000,
                 ),
                 ToolParameter(
                     name="task_type",
                     type=ParameterType.STRING,
                     description="Type of development task",
                     required=True,
-                    enum_values=["feature", "bugfix", "refactor", "analysis", "documentation", "testing", "security", "performance"]
+                    enum_values=[
+                        "feature",
+                        "bugfix",
+                        "refactor",
+                        "analysis",
+                        "documentation",
+                        "testing",
+                        "security",
+                        "performance",
+                    ],
                 ),
                 ToolParameter(
                     name="priority",
@@ -60,25 +71,25 @@ class DevTeamTaskSubmissionTool(BaseTool):
                     description="Priority level for the task",
                     required=False,
                     default_value="medium",
-                    enum_values=["low", "medium", "high", "urgent", "critical"]
+                    enum_values=["low", "medium", "high", "urgent", "critical"],
                 ),
                 ToolParameter(
                     name="requirements",
                     type=ParameterType.ARRAY,
                     description="List of specific requirements for the task",
                     required=False,
-                    default_value=[]
+                    default_value=[],
                 ),
                 ToolParameter(
                     name="tags",
                     type=ParameterType.ARRAY,
                     description="Tags to help categorize the task",
                     required=False,
-                    default_value=[]
-                )
-            ]
+                    default_value=[],
+                ),
+            ],
         )
-    
+
     @validate_parameters
     async def execute(
         self,
@@ -88,20 +99,20 @@ class DevTeamTaskSubmissionTool(BaseTool):
         priority: str = "medium",
         requirements: List[str] = None,
         tags: List[str] = None,
-        context=None
+        context=None,
     ) -> Result:
         """Submit a development task to the DevTeam Manager."""
         try:
             # Generate unique task ID
             task_id = f"task-{uuid.uuid4().hex[:8]}"
-            
+
             # Convert string values to enums
             task_type_enum = TaskType(task_type.upper())
             priority_enum = TaskPriority(priority.upper())
-            
+
             # Get event manager
             event_manager = get_event_manager()
-            
+
             # Create task submission event
             task_data = {
                 "task_id": task_id,
@@ -115,17 +126,19 @@ class DevTeamTaskSubmissionTool(BaseTool):
                 "tags": tags or [],
                 "context": {
                     "tool_name": self.metadata.name,
-                    "submitted_via": "mcp_tool"
-                }
+                    "submitted_via": "mcp_tool",
+                },
             }
-            
+
             # Submit the task
             await event_manager.publish(
-                DevTeamEvents.TASK_SUBMITTED.replace("submitted", "submit"),  # Use "submit" for submission
+                DevTeamEvents.TASK_SUBMITTED.replace(
+                    "submitted", "submit"
+                ),  # Use "submit" for submission
                 task_data,
-                source="devteam_tool"
+                source="devteam_tool",
             )
-            
+
             return Result.success_result(
                 data={
                     "task_id": task_id,
@@ -135,24 +148,21 @@ class DevTeamTaskSubmissionTool(BaseTool):
                     "priority": priority,
                     "expected_events": [
                         "devteam.task.submitted",
-                        "devteam.task.started", 
+                        "devteam.task.started",
                         "devteam.task.progress",
-                        "devteam.task.completed"
-                    ]
+                        "devteam.task.completed",
+                    ],
                 },
-                metadata={
-                    "tool": "devteam_submit_task",
-                    "task_id": task_id
-                }
+                metadata={"tool": "devteam_submit_task", "task_id": task_id},
             )
-            
+
         except Exception as e:
             return Result.error_result(f"Failed to submit development task: {e}")
 
 
 class DevTeamStatusTool(BaseTool):
     """Tool for checking the status of the DevTeam Manager."""
-    
+
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
@@ -167,76 +177,75 @@ class DevTeamStatusTool(BaseTool):
                     type=ParameterType.BOOLEAN,
                     description="Whether to include detailed task information",
                     required=False,
-                    default_value=True
+                    default_value=True,
                 ),
                 ToolParameter(
                     name="include_agents",
                     type=ParameterType.BOOLEAN,
                     description="Whether to include agent status information",
                     required=False,
-                    default_value=True
-                )
-            ]
+                    default_value=True,
+                ),
+            ],
         )
-    
+
     @validate_parameters
     async def execute(
-        self,
-        include_tasks: bool = True,
-        include_agents: bool = True,
-        context=None
+        self, include_tasks: bool = True, include_agents: bool = True, context=None
     ) -> Result:
         """Get the current status of the DevTeam Manager."""
         try:
             # For this example, we'll simulate getting status
             # In a real implementation, this would query the DevTeam Manager
-            
+
             from pythonium.core.managers import get_manager_registry
-            
+
             # Try to get the DevTeam manager
             registry = get_manager_registry()
             devteam_manager = await registry.get_manager("devteam")
-            
+
             if not devteam_manager:
                 return Result.error_result("DevTeam Manager is not available")
-            
+
             # Get team status
             team_status = devteam_manager.get_team_status()
-            
+
             result_data = {
-                "manager_status": "running" if devteam_manager.is_running else "not_running",
+                "manager_status": (
+                    "running" if devteam_manager.is_running else "not_running"
+                ),
                 "active_tasks": team_status.get("active_tasks", 0),
                 "queued_tasks": team_status.get("queued_tasks", 0),
                 "total_tasks": team_status.get("total_tasks", 0),
             }
-            
+
             if include_tasks:
                 # Get active task details
                 active_tasks = devteam_manager.list_active_tasks()
                 result_data["tasks"] = active_tasks
-            
+
             if include_agents:
                 # Get agent information
                 result_data["agents"] = team_status.get("agents", {})
-            
+
             # Add metrics
             result_data["metrics"] = team_status.get("metrics", {})
-            
+
             return Result.success_result(
                 data=result_data,
                 metadata={
                     "tool": "devteam_status",
-                    "timestamp": asyncio.get_event_loop().time()
-                }
+                    "timestamp": asyncio.get_event_loop().time(),
+                },
             )
-            
+
         except Exception as e:
             return Result.error_result(f"Failed to get DevTeam status: {e}")
 
 
 class DevTeamTaskStatusTool(BaseTool):
     """Tool for checking the status of a specific task."""
-    
+
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
@@ -252,38 +261,35 @@ class DevTeamTaskStatusTool(BaseTool):
                     description="ID of the task to check status for",
                     required=True,
                     min_length=8,
-                    max_length=50
+                    max_length=50,
                 )
-            ]
+            ],
         )
-    
+
     @validate_parameters
     async def execute(self, task_id: str, context=None) -> Result:
         """Get the status of a specific task."""
         try:
             from pythonium.core.managers import get_manager_registry
-            
+
             # Get the DevTeam manager
             registry = get_manager_registry()
             devteam_manager = await registry.get_manager("devteam")
-            
+
             if not devteam_manager:
                 return Result.error_result("DevTeam Manager is not available")
-            
+
             # Get task status
             task_status = devteam_manager.get_task_status(task_id)
-            
+
             if not task_status:
                 return Result.error_result(f"Task {task_id} not found")
-            
+
             return Result.success_result(
                 data=task_status,
-                metadata={
-                    "tool": "devteam_task_status",
-                    "task_id": task_id
-                }
+                metadata={"tool": "devteam_task_status", "task_id": task_id},
             )
-            
+
         except Exception as e:
             return Result.error_result(f"Failed to get task status: {e}")
 

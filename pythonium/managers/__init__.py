@@ -7,6 +7,6 @@ from .devteam import DevTeamManager
 
 __all__ = [
     "BaseManager",
-    "ManagerPriority", 
+    "ManagerPriority",
     "DevTeamManager",
 ]

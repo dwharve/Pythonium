@@ -254,7 +254,9 @@ class PythoniumMCPServer:
                 error_str = str(e)
                 if len(error_str) > 100:
                     error_str = error_str[:100] + "..."
-                logger.error(f"Error executing tool {tool_instance.metadata.name}: {error_str}")
+                logger.error(
+                    f"Error executing tool {tool_instance.metadata.name}: {error_str}"
+                )
                 raise
 
         # Set function attributes
