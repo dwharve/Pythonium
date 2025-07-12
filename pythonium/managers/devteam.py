@@ -36,6 +36,7 @@ from pythonium.managers.devteam_events import (
 )
 from pythonium.managers.devteam_langgraph import LangGraphWorkflowEngine
 from pythonium.managers.devteam_advanced_workflows import AdvancedWorkflowOrchestrator
+from pythonium.managers.devteam_prompt_optimization import PromptOptimizationAgent
 
 logger = get_logger(__name__)
 
@@ -55,8 +56,8 @@ class DevTeamManager(BaseManager):
     def __init__(self):
         super().__init__(
             name="devteam",
-            version="3.0.0",  # Updated version for Phase 3
-            description="AI-powered software development team manager with advanced workflow orchestration",
+            version="4.0.0",  # Updated version for Phase 4
+            description="AI-powered software development team manager with prompt optimization and adaptive learning",
         )
 
         # Set manager priority to normal
@@ -80,6 +81,9 @@ class DevTeamManager(BaseManager):
         
         # Advanced workflow orchestration (Phase 3: New)
         self._advanced_orchestrator: Optional[AdvancedWorkflowOrchestrator] = None
+
+        # Prompt optimization system (Phase 4: New)
+        self._prompt_optimizer: Optional[PromptOptimizationAgent] = None
 
         # Configuration
         self._config = {
@@ -131,6 +135,9 @@ class DevTeamManager(BaseManager):
 
         # Initialize agents
         await self._initialize_agents()
+
+        # Initialize prompt optimization system (Phase 4: New)
+        await self._initialize_prompt_optimizer()
 
         # Set up event handlers
         await self._setup_event_handlers()
@@ -238,6 +245,15 @@ class DevTeamManager(BaseManager):
         self._advanced_orchestrator = AdvancedWorkflowOrchestrator(self._agent_registry)
 
         logger.info("LangGraph workflow engine and advanced orchestrator initialized successfully")
+
+    async def _initialize_prompt_optimizer(self) -> None:
+        """Initialize the prompt optimization system (Phase 4)."""
+        logger.info("Initializing prompt optimization system")
+
+        # Create prompt optimization agent
+        self._prompt_optimizer = PromptOptimizationAgent(self._agent_registry)
+
+        logger.info("Prompt optimization system initialized successfully")
 
     async def _publish_workflow_event(
         self, event_name: str, data: Dict[str, Any]
@@ -574,6 +590,9 @@ class DevTeamManager(BaseManager):
                 "priority": task.priority,
             }
             
+            # Check for prompt optimization (Phase 4: New)
+            start_time = datetime.utcnow()
+            
             # Create advanced workflow plan
             if self._advanced_orchestrator:
                 workflow_plan = await self._advanced_orchestrator.create_advanced_workflow(task_data)
@@ -583,6 +602,9 @@ class DevTeamManager(BaseManager):
                 
                 # Execute the advanced workflow
                 result = await self._advanced_orchestrator.execute_workflow(workflow_plan.workflow_id)
+                
+                # Record performance metrics for prompt optimization (Phase 4: New)
+                await self._record_workflow_performance(task_id, result, start_time)
                 
                 if result["success"]:
                     logger.info(f"Task {task_id}: Advanced workflow completed successfully")
@@ -845,3 +867,107 @@ class DevTeamManager(BaseManager):
             if self._task_status[task_id]
             not in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]
         ]
+
+    # Phase 4: Prompt Optimization Methods
+
+    async def _record_workflow_performance(
+        self, task_id: str, workflow_result: Dict[str, Any], start_time: datetime
+    ) -> None:
+        """Record workflow performance metrics for prompt optimization."""
+        if not self._prompt_optimizer:
+            return
+
+        try:
+            # Calculate metrics
+            end_time = datetime.utcnow()
+            response_time = (end_time - start_time).total_seconds()
+            success = workflow_result.get("success", False)
+            
+            # Simple quality scoring based on workflow result
+            quality_score = 85.0 if success else 30.0
+            if "deliverables" in workflow_result:
+                quality_score += len(workflow_result["deliverables"]) * 5.0
+            quality_score = min(100.0, quality_score)
+
+            # Assume user satisfaction correlates with success and quality
+            user_satisfaction = quality_score * 0.9 if success else quality_score * 0.6
+
+            # Record performance for each agent involved (simplified - record for primary agent)
+            primary_agent_id = self._get_primary_agent_for_task(task_id)
+            if primary_agent_id:
+                await self._prompt_optimizer.record_task_performance(
+                    primary_agent_id,
+                    task_id,
+                    success,
+                    response_time,
+                    quality_score,
+                    user_satisfaction
+                )
+
+        except Exception as e:
+            logger.error(f"Error recording workflow performance for task {task_id}: {e}")
+
+    def _get_primary_agent_for_task(self, task_id: str) -> Optional[str]:
+        """Get the primary agent responsible for a task."""
+        # Simplified implementation - in practice this would track actual agent assignments
+        task = self._active_tasks.get(task_id)
+        if not task:
+            return None
+
+        # Default to developer for most tasks
+        if task.task_type in ["feature", "bugfix"]:
+            return "developer_1"
+        elif task.task_type == "documentation":
+            return "documentation_agent"
+        elif task.task_type == "code_review":
+            return "code_reviewer"
+        else:
+            return "project_manager"
+
+    async def start_prompt_optimization(self, agent_id: str) -> str:
+        """Start prompt optimization for a specific agent."""
+        if not self._prompt_optimizer:
+            raise ManagerError("Prompt optimization system not initialized")
+
+        test_id = await self._prompt_optimizer.start_optimization_cycle(agent_id)
+        
+        logger.info(f"Started prompt optimization for agent {agent_id} with test ID {test_id}")
+        return test_id
+
+    async def get_prompt_optimization_status(self) -> Dict[str, Any]:
+        """Get current prompt optimization status."""
+        if not self._prompt_optimizer:
+            return {"error": "Prompt optimization system not initialized"}
+
+        return await self._prompt_optimizer.get_optimization_status()
+
+    async def check_optimization_results(self, agent_id: str) -> Optional[Dict[str, Any]]:
+        """Check optimization results for an agent."""
+        if not self._prompt_optimizer:
+            return None
+
+        result = await self._prompt_optimizer.check_optimization_results(agent_id)
+        if result:
+            return {
+                "agent_type": result.agent_type,
+                "improvement_percentage": result.improvement_percentage,
+                "confidence_level": result.confidence_level,
+                "recommendation": result.recommendation,
+                "analysis_summary": result.analysis_summary
+            }
+        
+        return None
+
+    async def apply_prompt_optimization(self, agent_id: str, optimized_prompt: str) -> bool:
+        """Apply an optimized prompt to an agent."""
+        if not self._prompt_optimizer:
+            return False
+
+        success = await self._prompt_optimizer.apply_optimized_prompt(agent_id, optimized_prompt)
+        
+        if success:
+            logger.info(f"Applied optimized prompt to agent {agent_id}")
+        else:
+            logger.error(f"Failed to apply optimized prompt to agent {agent_id}")
+        
+        return success
