@@ -35,6 +35,7 @@ from pythonium.managers.devteam_events import (
     create_task_submission_event,
 )
 from pythonium.managers.devteam_langgraph import LangGraphWorkflowEngine
+from pythonium.managers.devteam_advanced_workflows import AdvancedWorkflowOrchestrator
 
 logger = get_logger(__name__)
 
@@ -54,8 +55,8 @@ class DevTeamManager(BaseManager):
     def __init__(self):
         super().__init__(
             name="devteam",
-            version="2.0.0",  # Updated version for Phase 2
-            description="AI-powered software development team manager with LangGraph orchestration",
+            version="3.0.0",  # Updated version for Phase 3
+            description="AI-powered software development team manager with advanced workflow orchestration",
         )
 
         # Set manager priority to normal
@@ -76,6 +77,9 @@ class DevTeamManager(BaseManager):
         # LangGraph workflow engine (Phase 2: New)
         self._workflow_engine: Optional[LangGraphWorkflowEngine] = None
         self._active_workflows: Dict[str, str] = {}  # task_id -> workflow_id
+        
+        # Advanced workflow orchestration (Phase 3: New)
+        self._advanced_orchestrator: Optional[AdvancedWorkflowOrchestrator] = None
 
         # Configuration
         self._config = {
@@ -229,7 +233,11 @@ class DevTeamManager(BaseManager):
             event_publisher=self._publish_workflow_event
         )
 
-        logger.info("LangGraph workflow engine initialized successfully")
+        # Initialize advanced workflow orchestrator (Phase 3)
+        logger.info("Initializing advanced workflow orchestrator")
+        self._advanced_orchestrator = AdvancedWorkflowOrchestrator(self._agent_registry)
+
+        logger.info("LangGraph workflow engine and advanced orchestrator initialized successfully")
 
     async def _publish_workflow_event(
         self, event_name: str, data: Dict[str, Any]
@@ -550,11 +558,50 @@ class DevTeamManager(BaseManager):
             )
 
     async def _execute_development_workflow(self, task_id: str) -> None:
-        """Execute the development workflow for a task (placeholder implementation)."""
+        """Execute the development workflow for a task using advanced orchestration."""
         task = self._active_tasks[task_id]
+        
+        try:
+            logger.info(f"Task {task_id}: Creating advanced workflow")
+            
+            # Convert task to format needed by advanced orchestrator
+            task_data = {
+                "task_id": task_id,
+                "task_type": task.task_type,
+                "title": task.title,
+                "description": task.description,
+                "requirements": task.requirements,
+                "priority": task.priority,
+            }
+            
+            # Create advanced workflow plan
+            if self._advanced_orchestrator:
+                workflow_plan = await self._advanced_orchestrator.create_advanced_workflow(task_data)
+                self._active_workflows[task_id] = workflow_plan.workflow_id
+                
+                logger.info(f"Task {task_id}: Created {workflow_plan.pattern.value} workflow with {workflow_plan.complexity.value} complexity")
+                
+                # Execute the advanced workflow
+                result = await self._advanced_orchestrator.execute_workflow(workflow_plan.workflow_id)
+                
+                if result["success"]:
+                    logger.info(f"Task {task_id}: Advanced workflow completed successfully")
+                    await self._complete_task(task_id, TaskStatus.COMPLETED)
+                else:
+                    logger.error(f"Task {task_id}: Advanced workflow failed: {result.get('error', 'Unknown error')}")
+                    await self._complete_task(task_id, TaskStatus.FAILED)
+            else:
+                # Fallback to legacy workflow if advanced orchestrator not available
+                logger.warning(f"Task {task_id}: Advanced orchestrator not available, using legacy workflow")
+                await self._execute_legacy_workflow(task_id)
+                
+        except Exception as e:
+            logger.error(f"Error executing workflow for task {task_id}: {e}")
+            await self._complete_task(task_id, TaskStatus.FAILED)
 
-        # This is a simplified workflow - in the full implementation,
-        # this would use LangGraph to orchestrate the actual agents
+    async def _execute_legacy_workflow(self, task_id: str) -> None:
+        """Execute the legacy simple workflow (fallback implementation)."""
+        task = self._active_tasks[task_id]
 
         phases = [
             (WorkflowPhase.PLANNING, "Planning and analysis"),
@@ -775,8 +822,20 @@ class DevTeamManager(BaseManager):
                 }
                 for agent_id, agent in self._agents.items()
             },
+            "advanced_workflows": len(self._active_workflows),
             "metrics": self._custom_metrics.copy(),
         }
+
+    def get_advanced_workflow_status(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Get advanced workflow status for a task."""
+        if task_id not in self._active_workflows:
+            return None
+        
+        workflow_id = self._active_workflows[task_id]
+        if self._advanced_orchestrator:
+            return self._advanced_orchestrator.get_workflow_status(workflow_id)
+        
+        return None
 
     def list_active_tasks(self) -> List[Dict[str, Any]]:
         """List all currently active tasks."""
