@@ -343,9 +343,23 @@ class DevTeamManager(BaseManager):
         
         # Convert to proper types
         task_type = TaskType(data['task_type']) if isinstance(data['task_type'], str) else data['task_type']
-        priority = TaskPriority(data.get('priority', 'MEDIUM')) if isinstance(data.get('priority'), str) else data.get('priority', TaskPriority.MEDIUM)
+        
+        # Handle priority conversion
+        priority_value = data.get('priority', 'medium')
+        if isinstance(priority_value, str):
+            priority_mapping = {
+                'low': TaskPriority.LOW,
+                'medium': TaskPriority.MEDIUM,
+                'high': TaskPriority.HIGH, 
+                'urgent': TaskPriority.URGENT,
+                'critical': TaskPriority.CRITICAL
+            }
+            priority = priority_mapping.get(priority_value.lower(), TaskPriority.MEDIUM)
+        else:
+            priority = priority_value if isinstance(priority_value, TaskPriority) else TaskPriority.MEDIUM
         
         # Create event
+        excluded_fields = required_fields + ['priority']  # Exclude priority from kwargs since we handle it explicitly
         return create_task_submission_event(
             task_id=data['task_id'],
             task_type=task_type,
@@ -353,7 +367,7 @@ class DevTeamManager(BaseManager):
             description=data['description'],
             submitter=data['submitter'],
             priority=priority,
-            **{k: v for k, v in data.items() if k not in required_fields}
+            **{k: v for k, v in data.items() if k not in excluded_fields}
         )
 
     async def _queue_task(self, task: TaskSubmissionEvent) -> None:
