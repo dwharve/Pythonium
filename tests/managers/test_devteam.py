@@ -278,3 +278,193 @@ class TestDevTeamManager:
         
         assert planning_or_in_progress <= max_concurrent
         assert len(manager._task_queue) >= 2
+
+    @pytest.mark.asyncio
+    async def test_task_submission_error_handling(self, manager):
+        """Test error handling during task submission."""
+        # Create invalid event with missing data
+        invalid_event = MagicMock()
+        invalid_event.data = {'task_id': 'invalid-task'}  # Missing required fields
+        
+        # Handle the invalid submission
+        await manager._handle_task_submission(invalid_event)
+        
+        # Check that error event was published
+        manager._event_manager.publish.assert_called()
+        
+        # Check for task failed event
+        call_args = manager._event_manager.publish.call_args_list
+        failed_calls = [call for call in call_args if call[0][0] == "devteam.task.failed"]
+        assert len(failed_calls) > 0
+
+    @pytest.mark.asyncio
+    async def test_background_task_timeout_handling(self, manager):
+        """Test timeout handling during shutdown."""
+        # Create a long-running background task
+        async def long_running_task():
+            await asyncio.sleep(15)  # Longer than shutdown timeout (10s)
+        
+        # Add to background tasks
+        task = asyncio.create_task(long_running_task())
+        manager._background_tasks.add(task)
+        
+        # Stop manager (should handle timeout gracefully)
+        await manager.stop()
+        
+        # Task should be cancelled due to timeout
+        assert task.cancelled() or task.done()
+
+    @pytest.mark.asyncio
+    async def test_list_active_tasks(self, manager):
+        """Test listing active tasks functionality."""
+        # Add some tasks in different states
+        task1 = create_task_submission_event(
+            task_id='active-1',
+            task_type=TaskType.FEATURE,
+            title='Active Task 1',
+            description='First active task',
+            submitter='test_tool'
+        )
+        
+        task2 = create_task_submission_event(
+            task_id='completed-2',
+            task_type=TaskType.BUGFIX,
+            title='Completed Task 2',
+            description='Second completed task',
+            submitter='test_tool'
+        )
+        
+        await manager._queue_task(task1)
+        await manager._queue_task(task2)
+        
+        # Mark one as completed
+        manager._task_status['completed-2'] = TaskStatus.COMPLETED
+        
+        # Get active tasks
+        active_tasks = manager.list_active_tasks()
+        
+        # Should only have the active task
+        assert len(active_tasks) == 1
+        assert active_tasks[0]['task_id'] == 'active-1'
+
+    @pytest.mark.asyncio
+    async def test_missing_task_status_handling(self, manager):
+        """Test handling of missing task status."""
+        # Try to get status for non-existent task
+        status = manager.get_task_status('non-existent-task')
+        assert status is None
+
+    @pytest.mark.asyncio
+    async def test_invalid_task_type_validation(self, manager):
+        """Test validation with invalid task type."""
+        invalid_data = {
+            'task_id': 'test-invalid-type',
+            'task_type': 'invalid_type',  # Not a valid TaskType
+            'title': 'Test Invalid Type',
+            'description': 'Test invalid task type',
+            'submitter': 'test_tool'
+        }
+        
+        with pytest.raises(ValueError):
+            manager._validate_task_submission(invalid_data)
+
+    @pytest.mark.asyncio
+    async def test_task_priority_handling(self, manager):
+        """Test task priority validation and handling."""
+        # Test with invalid priority (should default to MEDIUM)
+        invalid_data = {
+            'task_id': 'test-priority',
+            'task_type': 'feature',
+            'title': 'Test Priority',
+            'description': 'Test priority handling',
+            'submitter': 'test_tool',
+            'priority': 'invalid_priority'
+        }
+        
+        task_event = manager._validate_task_submission(invalid_data)
+        assert task_event.priority == TaskPriority.MEDIUM  # Should default to medium
+        
+        # Test with valid priority
+        valid_data = {
+            'task_id': 'test-priority-valid',
+            'task_type': 'feature',
+            'title': 'Test Priority Valid',
+            'description': 'Test valid priority handling',
+            'submitter': 'test_tool',
+            'priority': 'high'
+        }
+        
+        task_event = manager._validate_task_submission(valid_data)
+        assert task_event.priority == TaskPriority.HIGH
+
+    @pytest.mark.asyncio
+    async def test_configuration_loading(self, manager):
+        """Test configuration loading and validation."""
+        # Test that configuration is loaded properly
+        assert 'max_concurrent_tasks' in manager._config
+        assert 'agents' in manager._config
+        assert 'workflow' in manager._config
+        assert 'quality_gates' in manager._config
+        
+        # Test agent configuration
+        agents_config = manager._config['agents']
+        assert 'project_manager' in agents_config
+        assert 'developer' in agents_config
+        assert agents_config['developer']['instances'] == 2
+
+    @pytest.mark.asyncio
+    async def test_metrics_collection(self, manager):
+        """Test custom metrics collection."""
+        # Submit a task to generate metrics
+        task_event = create_task_submission_event(
+            task_id='metrics-test',
+            task_type=TaskType.FEATURE,
+            title='Metrics Test',
+            description='Test metrics collection',
+            submitter='test_tool'
+        )
+        
+        await manager._queue_task(task_event)
+        
+        # Check that metrics are collected
+        status = manager.get_team_status()
+        assert 'metrics' in status
+        metrics = status['metrics']
+        
+        # Should have some basic metrics
+        assert 'tasks_submitted' in metrics
+        assert metrics['tasks_submitted'] >= 1
+
+    @pytest.mark.asyncio
+    async def test_agent_capacity_management(self, manager):
+        """Test agent capacity and load balancing."""
+        # Check initial agent capacity
+        for agent_id, agent in manager._agents.items():
+            assert agent['current_tasks'] == 0
+            assert agent['max_tasks'] > 0
+            assert agent['status'] == 'idle'
+        
+        # Test capacity calculations
+        pm_agent = next(agent for agent in manager._agents.values() if agent['type'] == 'project_manager')
+        assert pm_agent['max_tasks'] == 10  # From config
+
+    @pytest.mark.asyncio
+    async def test_cleanup_completed_tasks(self, manager):
+        """Test cleanup of completed tasks."""
+        # Add an old completed task
+        task_event = create_task_submission_event(
+            task_id='old-completed',
+            task_type=TaskType.FEATURE,
+            title='Old Completed Task',
+            description='Old task for cleanup',
+            submitter='test_tool'
+        )
+        
+        await manager._queue_task(task_event)
+        manager._task_status['old-completed'] = TaskStatus.COMPLETED
+        
+        # Manually trigger cleanup (normally runs in background)
+        await manager._cleanup_completed_tasks()
+        
+        # Task should still exist (cleanup only after 24 hours)
+        assert 'old-completed' in manager._active_tasks
