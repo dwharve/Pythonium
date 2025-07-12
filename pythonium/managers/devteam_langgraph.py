@@ -462,6 +462,7 @@ class LangGraphWorkflowEngine:
             )
             # Use asdict for dataclass serialization
             from dataclasses import asdict
+
             await self.event_publisher(
                 "devteam.progress.update", asdict(progress_event)
             )
@@ -568,6 +569,7 @@ class LangGraphWorkflowEngine:
                     metadata={"workflow_id": workflow_id},
                 )
                 from dataclasses import asdict
+
                 await self.event_publisher(
                     "devteam.task.completed", asdict(completion_event)
                 )
@@ -593,6 +595,7 @@ class LangGraphWorkflowEngine:
                         metadata={"workflow_id": workflow_id, "error": str(e)},
                     )
                     from dataclasses import asdict
+
                     await self.event_publisher(
                         "devteam.task.failed", asdict(failure_event)
                     )
@@ -643,6 +646,7 @@ class LangGraphWorkflowEngine:
                 metadata={"workflow_id": workflow_id},
             )
             from dataclasses import asdict
+
             await self.event_publisher(
                 "devteam.task.cancelled", asdict(cancellation_event)
             )

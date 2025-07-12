@@ -307,7 +307,7 @@ class DevTeamManager(BaseManager):
                 data = event["data"]
             else:
                 data = event
-                
+
             logger.info(f"Received task submission: {data.get('task_id', 'unknown')}")
 
             # Validate the submission data
@@ -334,9 +334,9 @@ class DevTeamManager(BaseManager):
                     task_id = event["data"].get("task_id")
                 elif isinstance(event, dict):
                     task_id = event.get("task_id")
-            except:
+            except Exception:
                 pass
-                
+
             if task_id:
                 await self._emit_task_event(
                     DevTeamEvents.TASK_FAILED,

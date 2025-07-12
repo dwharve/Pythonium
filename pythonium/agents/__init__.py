@@ -226,9 +226,9 @@ class DevTeamAgentRegistry:
             dev_model = AIModelConfig(**default_model.__dict__)
             dev_model.temperature = 0.5  # Lower temperature for more deterministic code
 
-            self.agents[f"developer_{i+1}"] = AgentConfig(
+            self.agents[f"developer_{i + 1}"] = AgentConfig(
                 agent_type=AgentType.DEVELOPER,
-                name=f"DEV-{i+1}",
+                name=f"DEV-{i + 1}",
                 model_config=dev_model,
                 capabilities=AgentCapabilities(
                     can_generate_code=True,
