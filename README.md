@@ -146,7 +146,7 @@ The project uses pytest for testing with comprehensive coverage across all compo
 - **End-to-End Tests**: Full MCP server functionality
 - **Performance Tests**: Load testing and benchmarks
 
-**Current Status**: 238 tests with robust coverage across all modules
+**Current Status**: 308 tests with robust coverage across all modules (68 DevTeam Manager tests, 240 other component tests)
 
 ```bash
 # Run all tests
