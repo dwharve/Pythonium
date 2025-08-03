@@ -11,7 +11,7 @@ import os
 import shlex
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from pythonium.common.base import Result
 from pythonium.common.error_handling import handle_tool_error
@@ -24,7 +24,7 @@ from pythonium.tools.base import (
     ToolParameter,
 )
 
-from .parameters import ExecuteCommandParams
+from .parameters import ExecuteCommandParams, ExecutePythonParams
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -470,3 +470,110 @@ class ExecuteCommandTool(BaseTool):
         if path.exists() and path.is_dir():
             return str(path.resolve())
         return None
+
+
+class ExecutePythonTool(BaseTool):
+    """Simplified Python execution tool for running Python code via stdin.
+
+    This is a convenience wrapper around ExecuteCommandTool that automatically
+    uses the current Python interpreter and passes code via stdin. For more
+    complex Python execution scenarios, use ExecuteCommandTool directly.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._command_executor = ExecuteCommandTool()
+
+    async def initialize(self) -> None:
+        """Initialize the tool and its dependencies."""
+        await self._command_executor.initialize()
+
+    async def shutdown(self) -> None:
+        """Shutdown the tool and cleanup."""
+        await self._command_executor.shutdown()
+
+    @property
+    def metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            name="execute_python",
+            description="Execute Python code using current interpreter (python -c)",
+            brief_description="Execute Python code",
+            category="system",
+            tags=[
+                "python",
+                "execute",
+                "code",
+                "script",
+                "interpreter",
+                "convenience",
+            ],
+            dangerous=True,  # Code execution is inherently dangerous
+            parameters=[
+                ToolParameter(
+                    name="code",
+                    type=ParameterType.STRING,
+                    description="Python code to execute",
+                    required=True,
+                ),
+                ToolParameter(
+                    name="working_directory",
+                    type=ParameterType.STRING,
+                    description="Working directory for execution",
+                    required=False,
+                ),
+                ToolParameter(
+                    name="timeout",
+                    type=ParameterType.INTEGER,
+                    description="Execution timeout in seconds (max 300)",
+                    default=30,
+                    min_value=1,
+                    max_value=300,
+                ),
+                ToolParameter(
+                    name="capture_output",
+                    type=ParameterType.BOOLEAN,
+                    description="Capture stdout and stderr",
+                    default=True,
+                ),
+                ToolParameter(
+                    name="environment",
+                    type=ParameterType.OBJECT,
+                    description="Additional environment variables",
+                    default={},
+                ),
+            ],
+        )
+
+    @validate_parameters(ExecutePythonParams)
+    @handle_tool_error
+    async def execute(
+        self, params: ExecutePythonParams, context: ToolContext
+    ) -> Result[Any]:
+        """Execute Python code via python -c."""
+        import sys
+
+        # Get current Python executable
+        python_executable = sys.executable
+
+        # Create parameters dictionary for ExecuteCommandTool
+        cmd_params = {
+            "command": python_executable,
+            "args": ["-c", params.code],
+            "working_directory": params.working_directory,
+            "timeout": params.timeout,
+            "capture_output": params.capture_output,
+            "shell": False,
+            "environment": params.environment,
+            "stdin": None,  # We use -c instead of stdin
+        }
+
+        # Execute using ExecuteCommandTool
+        cmd_tool = ExecuteCommandTool()
+        result = await cmd_tool.execute(cmd_params, context)
+
+        # Enhance result with Python-specific information
+        if result.success:
+            result.data["python_executable"] = python_executable
+            result.data["execution_type"] = "python_code"
+
+        return result  # type: ignore[no-any-return]

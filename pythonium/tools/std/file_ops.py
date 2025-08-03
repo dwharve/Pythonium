@@ -34,16 +34,16 @@ from .parameters import (
 
 
 class ReadFileTool(BaseTool):
-    """Tool for reading file contents."""
+    """Tool for reading file contents with advanced line selection capabilities."""
 
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
             name="read_file",
-            description="Read and return the complete contents of a text file. Handles various file encodings and supports reading code files (Python, JavaScript, etc.), configuration files, documentation, logs, and other text-based files. Includes safety limits to prevent reading extremely large files.",
-            brief_description="Read the contents of a text file",
+            description="Read file contents with line selection: ranges, specific lines, patterns, head/tail operations",
+            brief_description="Read file contents with line selection",
             category="filesystem",
-            tags=["file", "read", "content", "text", "code", "config", "logs"],
+            tags=["file", "read", "lines", "text"],
             parameters=[
                 ToolParameter(
                     name="path",
@@ -64,6 +64,52 @@ class ReadFileTool(BaseTool):
                     default=10 * 1024 * 1024,  # 10MB
                     min_value=1,
                 ),
+                ToolParameter(
+                    name="start_line",
+                    type=ParameterType.INTEGER,
+                    description="Starting line number for range reading (1-indexed)",
+                    min_value=1,
+                ),
+                ToolParameter(
+                    name="end_line",
+                    type=ParameterType.INTEGER,
+                    description="Ending line number for range reading (1-indexed)",
+                    min_value=1,
+                ),
+                ToolParameter(
+                    name="line_numbers",
+                    type=ParameterType.ARRAY,
+                    description="Specific line numbers to read (1-indexed)",
+                ),
+                ToolParameter(
+                    name="line_pattern",
+                    type=ParameterType.STRING,
+                    description="Regex pattern to match lines (only matching lines returned)",
+                ),
+                ToolParameter(
+                    name="head_lines",
+                    type=ParameterType.INTEGER,
+                    description="Read only the first N lines of the file",
+                    min_value=1,
+                ),
+                ToolParameter(
+                    name="tail_lines",
+                    type=ParameterType.INTEGER,
+                    description="Read only the last N lines of the file",
+                    min_value=1,
+                ),
+                ToolParameter(
+                    name="include_line_numbers",
+                    type=ParameterType.BOOLEAN,
+                    description="Include line numbers in the output",
+                    default=False,
+                ),
+                ToolParameter(
+                    name="strip_whitespace",
+                    type=ParameterType.BOOLEAN,
+                    description="Strip leading/trailing whitespace from each line",
+                    default=False,
+                ),
             ],
         )
 
@@ -72,7 +118,7 @@ class ReadFileTool(BaseTool):
     async def execute(
         self, params: ReadFileParams, context: ToolContext
     ) -> Result[Any]:
-        """Execute file read operation with async support."""
+        """Execute file read operation with advanced line selection."""
         file_path = Path(params.path)
         encoding = params.encoding
         max_size = params.max_size
@@ -86,24 +132,40 @@ class ReadFileTool(BaseTool):
             if not file_path.is_file():
                 raise ToolExecutionError(f"Path is not a file: {file_path}")
 
-            # Use async file service for improved performance
+            # Read the entire file first
             content = await async_file_service.read_text(
                 file_path, encoding=encoding, max_size=max_size
             )
+
+            # Split into lines for processing
+            all_lines = content.splitlines()
+            total_lines = len(all_lines)
+
+            # Apply line selection based on parameters
+            selected_lines = self._select_lines(params, all_lines)
+
+            # Process lines (add line numbers, strip whitespace)
+            processed_lines = self._process_lines(params, selected_lines, all_lines)
+
+            # Reconstruct content
+            final_content = "\n".join(processed_lines) if processed_lines else ""
 
             # Get file info
             file_info = await async_file_service.get_file_info(file_path)
 
             return Result[Any].success_result(
                 data={
-                    "content": content,
+                    "content": final_content,
                     "path": str(file_path),
                     "size": file_info["size"],
                     "encoding": encoding,
+                    "lines_returned": len(processed_lines),
+                    "total_lines": total_lines,
                 },
                 metadata={
-                    "lines": len(content.splitlines()),
-                    "characters": len(content),
+                    "selection_type": self._get_selection_type(params),
+                    "lines_selected": len(selected_lines),
+                    "characters": len(final_content),
                     "modified": file_info["modified"],
                 },
             )
@@ -112,23 +174,135 @@ class ReadFileTool(BaseTool):
             # Convert async file errors to tool execution errors
             raise ToolExecutionError(str(e)) from e
 
+    def _select_lines(
+        self, params: ReadFileParams, all_lines: List[str]
+    ) -> List[tuple]:
+        """Select lines based on parameters. Returns list of (line_number, content) tuples."""
+        if params.start_line is not None or params.end_line is not None:
+            return self._select_line_range(params, all_lines)
+        elif params.line_numbers is not None:
+            return self._select_specific_lines(params, all_lines)
+        elif params.line_pattern is not None:
+            return self._select_pattern_lines(params, all_lines)
+        elif params.head_lines is not None:
+            return self._select_head_lines(params, all_lines)
+        elif params.tail_lines is not None:
+            return self._select_tail_lines(params, all_lines)
+        else:
+            # Return all lines
+            return [(i + 1, line) for i, line in enumerate(all_lines)]
+
+    def _select_line_range(
+        self, params: ReadFileParams, all_lines: List[str]
+    ) -> List[tuple]:
+        """Select lines within a range."""
+        start = (params.start_line or 1) - 1  # Convert to 0-indexed
+        end = (params.end_line or len(all_lines)) - 1  # Convert to 0-indexed
+
+        start = max(0, start)
+        end = min(len(all_lines) - 1, end)
+
+        return [(i + 1, all_lines[i]) for i in range(start, end + 1)]
+
+    def _select_specific_lines(
+        self, params: ReadFileParams, all_lines: List[str]
+    ) -> List[tuple]:
+        """Select specific line numbers."""
+        if params.line_numbers is None:
+            return []
+
+        selected = []
+        for line_num in params.line_numbers:
+            if 1 <= line_num <= len(all_lines):
+                selected.append((line_num, all_lines[line_num - 1]))
+        return selected
+
+    def _select_pattern_lines(
+        self, params: ReadFileParams, all_lines: List[str]
+    ) -> List[tuple]:
+        """Select lines matching a regex pattern."""
+        if params.line_pattern is None:
+            return []
+
+        import re
+
+        flags = 0
+        # Default to case-insensitive matching
+        flags |= re.IGNORECASE
+
+        pattern = re.compile(params.line_pattern, flags)
+        selected = []
+
+        for i, line in enumerate(all_lines):
+            if pattern.search(line):
+                selected.append((i + 1, line))
+
+        return selected
+
+    def _select_head_lines(
+        self, params: ReadFileParams, all_lines: List[str]
+    ) -> List[tuple]:
+        """Select first N lines."""
+        if params.head_lines is None:
+            return []
+        n = min(params.head_lines, len(all_lines))
+        return [(i + 1, all_lines[i]) for i in range(n)]
+
+    def _select_tail_lines(
+        self, params: ReadFileParams, all_lines: List[str]
+    ) -> List[tuple]:
+        """Select last N lines."""
+        if params.tail_lines is None:
+            return []
+        n = min(params.tail_lines, len(all_lines))
+        start_idx = max(0, len(all_lines) - n)
+        return [(i + 1, all_lines[i]) for i in range(start_idx, len(all_lines))]
+
+    def _process_lines(
+        self, params: ReadFileParams, selected_lines: List[tuple], all_lines: List[str]
+    ) -> List[str]:
+        """Process selected lines (add line numbers, strip whitespace)."""
+        processed = []
+
+        for line_num, line_content in selected_lines:
+            if params.strip_whitespace:
+                line_content = line_content.strip()
+
+            if params.include_line_numbers:
+                processed.append(f"{line_num:4d}: {line_content}")
+            else:
+                processed.append(line_content)
+
+        return processed
+
+    def _get_selection_type(self, params: ReadFileParams) -> str:
+        """Get a string describing the selection type used."""
+        if params.start_line is not None or params.end_line is not None:
+            return "line_range"
+        elif params.line_numbers is not None:
+            return "specific_lines"
+        elif params.line_pattern is not None:
+            return "pattern_match"
+        elif params.head_lines is not None:
+            return "head"
+        elif params.tail_lines is not None:
+            return "tail"
+        else:
+            return "full_file"
+
 
 class WriteFileTool(BaseTool):
-    """Tool for writing content to files and creating new files.
-
-    This tool combines file creation and writing functionality. It can create new files
-    with content or update existing files, with options for appending and directory creation.
-    """
+    """Tool for writing and editing files with multiple write modes."""
 
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
             name="write_file",
-            description="Write text content to a file, creating it if it doesn't exist or updating existing content. Supports creating new files, saving generated code, writing configuration files, creating documentation, or updating existing files. Creates parent directories if they don't exist. Can append to existing files or overwrite them.",
-            brief_description="Write text content to a file or create new files",
+            description="Write/edit files with modes: write, append, prepend, insert, replace",
+            brief_description="Write and edit file contents",
             category="filesystem",
-            tags=["file", "write", "create", "save", "generate", "update", "append"],
-            dangerous=True,  # File modification is potentially dangerous
+            tags=["file", "write", "edit", "modify"],
+            dangerous=True,
             parameters=[
                 ToolParameter(
                     name="path",
@@ -139,14 +313,38 @@ class WriteFileTool(BaseTool):
                 ToolParameter(
                     name="content",
                     type=ParameterType.STRING,
-                    description="Text content to write to the file (use empty string to create empty file)",
+                    description="Text content to write/add to the file",
                     default="",
                 ),
                 ToolParameter(
                     name="encoding",
                     type=ParameterType.STRING,
-                    description="File encoding",
+                    description="File encoding (utf-8, ascii, latin-1, etc.)",
                     default="utf-8",
+                ),
+                ToolParameter(
+                    name="mode",
+                    type=ParameterType.STRING,
+                    description="Write mode: 'write' (overwrite), 'append', 'prepend', 'insert', 'replace'",
+                    default="write",
+                    allowed_values=["write", "append", "prepend", "insert", "replace"],
+                ),
+                ToolParameter(
+                    name="insert_at_line",
+                    type=ParameterType.INTEGER,
+                    description="Line number to insert content at (1-indexed, required for 'insert' mode)",
+                    min_value=1,
+                ),
+                ToolParameter(
+                    name="replace_pattern",
+                    type=ParameterType.STRING,
+                    description="Regex pattern to find and replace (required for 'replace' mode)",
+                ),
+                ToolParameter(
+                    name="replace_all",
+                    type=ParameterType.BOOLEAN,
+                    description="Replace all occurrences of pattern (default: first only)",
+                    default=False,
                 ),
                 ToolParameter(
                     name="create_dirs",
@@ -155,15 +353,9 @@ class WriteFileTool(BaseTool):
                     default=True,
                 ),
                 ToolParameter(
-                    name="overwrite",
+                    name="backup",
                     type=ParameterType.BOOLEAN,
-                    description="Overwrite file if it exists",
-                    default=True,
-                ),
-                ToolParameter(
-                    name="append",
-                    type=ParameterType.BOOLEAN,
-                    description="Append to existing file instead of overwriting",
+                    description="Create backup of existing file before modification",
                     default=False,
                 ),
             ],
@@ -174,46 +366,245 @@ class WriteFileTool(BaseTool):
     async def execute(
         self, params: WriteFileParams, context: ToolContext
     ) -> Result[Any]:
-        """Execute file write operation with async support."""
+        """Execute file write operation with advanced editing capabilities."""
         file_path = Path(params.path)
-        content = params.content
-        encoding = params.encoding
-        append_mode = params.append
-        overwrite = params.overwrite
-        create_dirs = params.create_dirs
 
         try:
-            # Check if file exists and overwrite/append mode
-            if file_path.exists() and not overwrite and not append_mode:
-                raise ToolExecutionError(
-                    f"File already exists and overwrite=False: {file_path}"
-                )
+            # Create backup if requested and file exists
+            backup_path = None
+            if params.backup and file_path.exists():
+                backup_path = await self._create_backup(file_path, ".bak")
 
-            # Use async file service for improved performance
-            result = await async_file_service.write_text(
-                file_path,
-                content,
-                encoding=encoding,
-                append=append_mode,
-                create_dirs=create_dirs,
-            )
+            # Process content based on mode
+            if params.mode == "write":
+                result = await self._write_content(file_path, params)
+            elif params.mode == "append":
+                result = await self._append_content(file_path, params)
+            elif params.mode == "prepend":
+                result = await self._prepend_content(file_path, params)
+            elif params.mode == "insert":
+                result = await self._insert_content(file_path, params)
+            elif params.mode == "replace":
+                result = await self._replace_content(file_path, params)
+            else:
+                raise ToolExecutionError(f"Unsupported write mode: {params.mode}")
+
+            # Add backup information to result
+            if backup_path:
+                result["backup_created"] = str(backup_path)
 
             return Result[Any].success_result(
-                data={
-                    "path": result["path"],
-                    "size": result["size"],
-                    "encoding": result["encoding"],
-                    "append": result["append"],
-                },
+                data=result,
                 metadata={
-                    "lines": result["lines"],
-                    "characters": result["characters"],
+                    "mode": params.mode,
+                    "backup_created": backup_path is not None,
+                    "operation_type": "file_write",
                 },
             )
 
         except AsyncFileError as e:
             # Convert async file errors to tool execution errors
             raise ToolExecutionError(str(e)) from e
+
+    async def _create_backup(self, file_path: Path, backup_extension: str) -> Path:
+        """Create a backup of the existing file."""
+        backup_path = file_path.with_suffix(file_path.suffix + backup_extension)
+
+        # Handle cases where backup already exists
+        counter = 1
+        while backup_path.exists():
+            backup_path = file_path.with_suffix(
+                f"{file_path.suffix}{backup_extension}.{counter}"
+            )
+            counter += 1
+
+        # Copy the file
+        content = await async_file_service.read_text(file_path)
+        await async_file_service.write_text(backup_path, content, create_dirs=False)
+        return backup_path
+
+    async def _write_content(
+        self, file_path: Path, params: WriteFileParams
+    ) -> Dict[str, Any]:
+        """Write content to file (overwrite mode)."""
+        content = self._process_content(params.content, params)
+
+        result = await async_file_service.write_text(
+            file_path,
+            content,
+            encoding=params.encoding,
+            append=False,
+            create_dirs=params.create_dirs,
+        )
+
+        return {
+            "path": result["path"],
+            "size": result["size"],
+            "encoding": result["encoding"],
+            "lines": result["lines"],
+            "characters": result["characters"],
+            "mode": "write",
+        }
+
+    async def _append_content(
+        self, file_path: Path, params: WriteFileParams
+    ) -> Dict[str, Any]:
+        """Append content to file."""
+        content = self._process_content(params.content, params)
+
+        result = await async_file_service.write_text(
+            file_path,
+            content,
+            encoding=params.encoding,
+            append=True,
+            create_dirs=params.create_dirs,
+        )
+
+        return {
+            "path": result["path"],
+            "size": result["size"],
+            "encoding": result["encoding"],
+            "lines_added": result["lines"],
+            "characters_added": result["characters"],
+            "mode": "append",
+        }
+
+    async def _prepend_content(
+        self, file_path: Path, params: WriteFileParams
+    ) -> Dict[str, Any]:
+        """Prepend content to beginning of file."""
+        # Read existing content if file exists
+        existing_content = ""
+        if file_path.exists():
+            existing_content = await async_file_service.read_text(
+                file_path, encoding=params.encoding
+            )
+
+        # Combine new content with existing content
+        new_content = self._process_content(params.content, params)
+        combined_content = new_content + existing_content
+
+        result = await async_file_service.write_text(
+            file_path,
+            combined_content,
+            encoding=params.encoding,
+            append=False,
+            create_dirs=params.create_dirs,
+        )
+
+        return {
+            "path": result["path"],
+            "size": result["size"],
+            "encoding": result["encoding"],
+            "total_lines": result["lines"],
+            "lines_prepended": len(new_content.splitlines()),
+            "mode": "prepend",
+        }
+
+    async def _insert_content(
+        self, file_path: Path, params: WriteFileParams
+    ) -> Dict[str, Any]:
+        """Insert content at specific line number."""
+        # Read existing content
+        if not file_path.exists():
+            raise ToolExecutionError(
+                f"Cannot insert into non-existent file: {file_path}"
+            )
+
+        existing_content = await async_file_service.read_text(
+            file_path, encoding=params.encoding
+        )
+        lines = existing_content.splitlines()
+
+        # Insert content at specified line
+        if params.insert_at_line is None:
+            raise ToolExecutionError("insert_at_line is required for insert mode")
+        insert_line = params.insert_at_line - 1  # Convert to 0-indexed
+        new_content_lines = self._process_content(params.content, params).splitlines()
+
+        # Insert the new lines
+        lines[insert_line:insert_line] = new_content_lines
+
+        # Reconstruct content
+        combined_content = "\n".join(lines)
+        combined_content += "\n"
+
+        result = await async_file_service.write_text(
+            file_path,
+            combined_content,
+            encoding=params.encoding,
+            append=False,
+            create_dirs=params.create_dirs,
+        )
+
+        return {
+            "path": result["path"],
+            "size": result["size"],
+            "encoding": result["encoding"],
+            "total_lines": result["lines"],
+            "lines_inserted": len(new_content_lines),
+            "inserted_at_line": params.insert_at_line,
+            "mode": "insert",
+        }
+
+    async def _replace_content(
+        self, file_path: Path, params: WriteFileParams
+    ) -> Dict[str, Any]:
+        """Replace content using regex pattern."""
+        import re
+
+        # Read existing content
+        if not file_path.exists():
+            raise ToolExecutionError(
+                f"Cannot replace in non-existent file: {file_path}"
+            )
+
+        existing_content = await async_file_service.read_text(
+            file_path, encoding=params.encoding
+        )
+
+        # Prepare regex flags (default behavior)
+        flags = 0
+
+        # Compile pattern
+        if params.replace_pattern is None:
+            raise ToolExecutionError("replace_pattern is required for replace mode")
+        pattern = re.compile(params.replace_pattern, flags)
+
+        # Perform replacement
+        replacement_content = self._process_content(params.content, params)
+
+        if params.replace_all:
+            new_content, count = pattern.subn(replacement_content, existing_content)
+        else:
+            new_content, count = pattern.subn(
+                replacement_content, existing_content, count=1
+            )
+
+        if count == 0:
+            raise ToolExecutionError(f"Pattern not found: {params.replace_pattern}")
+
+        result = await async_file_service.write_text(
+            file_path,
+            new_content,
+            encoding=params.encoding,
+            append=False,
+            create_dirs=params.create_dirs,
+        )
+
+        return {
+            "path": result["path"],
+            "size": result["size"],
+            "encoding": result["encoding"],
+            "total_lines": result["lines"],
+            "replacements_made": count,
+            "pattern": params.replace_pattern,
+            "mode": "replace",
+        }
+
+    def _process_content(self, content: str, params: WriteFileParams) -> str:
+        """Process content (minimal processing for simplicity)."""
+        return content
 
 
 class DeleteFileTool(BaseTool):

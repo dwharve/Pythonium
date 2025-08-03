@@ -103,8 +103,13 @@ def serve(ctx, host: str, port: int, transport: str):
             config_overrides=config_overrides,
         )
 
-        # Use the generic run method
-        asyncio.run(server.run())
+        # For stdio transport, FastMCP manages its own event loop
+        if transport.lower() == "stdio":
+            # Run synchronously - FastMCP will handle the asyncio loop
+            server.run_stdio()
+        else:
+            # For other transports, use async run method
+            asyncio.run(server.run())
 
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
@@ -136,13 +141,10 @@ def _build_mcp_config(python_path: str) -> dict:
     """Build MCP server configuration for pythonium."""
     return {
         "name": "pythonium",
-        "command": [python_path],
+        "command": [python_path, "-m", "pythonium", "serve"],
         "args": [
-            "-m",
-            "pythonium",
             "--log-level",
             "WARNING",
-            "serve",
             "--transport",
             "stdio",
         ],

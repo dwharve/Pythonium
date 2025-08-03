@@ -10,7 +10,7 @@ import re
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from pythonium.common.base import Result
 from pythonium.common.error_handling import handle_tool_error
@@ -24,7 +24,7 @@ from pythonium.tools.base import (
     ToolParameter,
 )
 
-from .parameters import HttpRequestParams, WebSearchParams
+from .parameters import FetchWebpageParams, HttpRequestParams, WebSearchParams
 
 
 class WebSearchTool(BaseTool):
@@ -1211,3 +1211,434 @@ class HttpClientTool(BaseTool):
             return "server_error"
         else:
             return "unknown"
+
+
+class FetchWebpageTool(BaseTool):
+    """Tool for fetching webpages and converting them to LLM-friendly markup."""
+
+    def __init__(self):
+        super().__init__()
+        # Note: HttpService will be created per request with specific timeout
+
+    async def initialize(self) -> None:
+        """Initialize the tool."""
+        pass
+
+    async def shutdown(self) -> None:
+        """Shutdown the tool."""
+        pass
+
+    @property
+    def metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            name="fetch_webpage",
+            description="Fetch and parse webpage content into LLM-friendly markdown format",
+            brief_description="Fetch and parse webpage content for LLM analysis",
+            category="web",
+            tags=["web", "fetch", "parse", "content", "markdown"],
+            dangerous=False,
+            parameters=[
+                ToolParameter(
+                    name="url",
+                    type=ParameterType.STRING,
+                    description="URL of the webpage to fetch and parse",
+                    required=True,
+                ),
+                ToolParameter(
+                    name="timeout",
+                    type=ParameterType.INTEGER,
+                    description="Request timeout in seconds",
+                    default=30,
+                    min_value=1,
+                    max_value=300,
+                ),
+                ToolParameter(
+                    name="max_content_length",
+                    type=ParameterType.INTEGER,
+                    description="Maximum content length to process",
+                    default=50000,
+                    min_value=1000,
+                    max_value=500000,
+                ),
+                ToolParameter(
+                    name="include_links",
+                    type=ParameterType.BOOLEAN,
+                    description="Include extracted links in the output",
+                    default=True,
+                ),
+                ToolParameter(
+                    name="include_images",
+                    type=ParameterType.BOOLEAN,
+                    description="Include image descriptions and alt text",
+                    default=True,
+                ),
+                ToolParameter(
+                    name="include_metadata",
+                    type=ParameterType.BOOLEAN,
+                    description="Include page metadata (title, description, etc.)",
+                    default=True,
+                ),
+                ToolParameter(
+                    name="user_agent",
+                    type=ParameterType.STRING,
+                    description="Custom User-Agent header for the request",
+                ),
+            ],
+        )
+
+    @validate_parameters(FetchWebpageParams)
+    @handle_tool_error
+    async def execute(
+        self, params: FetchWebpageParams, context: ToolContext
+    ) -> Result[Any]:
+        """Fetch and parse webpage content into LLM-friendly format."""
+        headers = {}
+        if params.user_agent:
+            headers["User-Agent"] = params.user_agent
+        else:
+            headers["User-Agent"] = (
+                "Mozilla/5.0 (compatible; Pythonium/1.0; +https://github.com/dwharve/pythonium)"
+            )
+
+        try:
+            # Create HTTP service with timeout
+            http_service = HttpService(timeout=params.timeout)
+
+            # Fetch the webpage
+            response = await http_service.request(
+                method="GET",
+                url=params.url,
+                headers=headers,
+            )
+
+            if not response.success:
+                return Result[Any].error_result(
+                    f"Failed to fetch webpage: {response.error or 'Unknown error'}",
+                    metadata={
+                        "status_code": getattr(response, "status_code", None),
+                        "url": params.url,
+                    },
+                )
+
+            # Parse the HTML content
+            if response.data is None:
+                return Result[Any].error_result(
+                    "Empty response received from webpage", metadata={"url": params.url}
+                )
+
+            # For HTML responses, response.data should be a string
+            soup = BeautifulSoup(response.data, "html.parser")  # type: ignore[arg-type]
+
+            # Extract metadata
+            metadata = {}
+            if params.include_metadata:
+                metadata = self._extract_metadata(soup)
+
+            # Extract main content
+            content = self._extract_content(soup, params.max_content_length)
+
+            # Extract links
+            links = []
+            if params.include_links:
+                links = self._extract_links(soup, params.url)
+
+            # Extract images
+            images = []
+            if params.include_images:
+                images = self._extract_images(soup, params.url)
+
+            # Generate LLM-friendly markdown
+            markdown_content = self._generate_markdown(
+                metadata, content, links, images, params
+            )
+
+            return Result[Any].success_result(
+                data={
+                    "success": True,
+                    "url": params.url,
+                    "title": metadata.get("title", ""),
+                    "content": markdown_content,
+                    "metadata": metadata,
+                    "links_count": len(links),
+                    "images_count": len(images),
+                    "content_length": len(content),
+                },
+                metadata={
+                    "status_code": getattr(response, "status_code", None),
+                    "response_size": len(str(response.data)),
+                },
+            )
+
+        except Exception as e:
+            return Result[Any].error_result(
+                f"Error processing webpage: {str(e)}", metadata={"url": params.url}
+            )
+
+    def _extract_metadata(self, soup: BeautifulSoup) -> Dict[str, str]:
+        """Extract page metadata from HTML."""
+        metadata = {}
+
+        # Title
+        title_tag = soup.find("title")
+        if title_tag:
+            metadata["title"] = title_tag.get_text().strip()
+
+        # Meta description
+        desc_tag = soup.find("meta", attrs={"name": "description"})
+        if isinstance(desc_tag, Tag) and desc_tag.get("content"):
+            content = desc_tag.get("content")
+            if isinstance(content, str):
+                metadata["description"] = content.strip()
+
+        # Open Graph metadata
+        og_title = soup.find("meta", property="og:title")
+        if isinstance(og_title, Tag) and og_title.get("content"):
+            content = og_title.get("content")
+            if isinstance(content, str):
+                metadata["og_title"] = content.strip()
+
+        og_desc = soup.find("meta", property="og:description")
+        if isinstance(og_desc, Tag) and og_desc.get("content"):
+            content = og_desc.get("content")
+            if isinstance(content, str):
+                metadata["og_description"] = content.strip()
+
+        # Keywords
+        keywords_tag = soup.find("meta", attrs={"name": "keywords"})
+        if isinstance(keywords_tag, Tag) and keywords_tag.get("content"):
+            content = keywords_tag.get("content")
+            if isinstance(content, str):
+                metadata["keywords"] = content.strip()
+
+        # Author
+        author_tag = soup.find("meta", attrs={"name": "author"})
+        if isinstance(author_tag, Tag) and author_tag.get("content"):
+            content = author_tag.get("content")
+            if isinstance(content, str):
+                metadata["author"] = content.strip()
+
+        return metadata
+
+    def _extract_content(self, soup: BeautifulSoup, max_length: int) -> str:
+        """Extract and clean main content from HTML."""
+        # Remove unwanted elements
+        for element in soup(
+            ["script", "style", "nav", "footer", "header", "aside", "noscript"]
+        ):
+            element.decompose()
+
+        # Try to find main content area
+        main_content = (
+            soup.find("main")
+            or soup.find("article")
+            or soup.find("div", class_=re.compile(r"content|main|post|article", re.I))
+            or soup.find("body")
+            or soup
+        )
+
+        # Extract text with some structure preservation
+        content_parts = []
+
+        # Extract headings and paragraphs with structure
+        if hasattr(main_content, "find_all"):
+            for element in main_content.find_all(
+                ["h1", "h2", "h3", "h4", "h5", "h6", "p", "div", "section", "article"]
+            ):
+                text = element.get_text(strip=True)
+                if text and len(text) > 10:  # Skip very short text
+                    if element.name in ["h1", "h2", "h3", "h4", "h5", "h6"]:
+                        # Add markdown-style headers
+                        level = int(element.name[1])
+                        content_parts.append(f"{'#' * level} {text}")
+                    else:
+                        content_parts.append(text)
+
+        # If no structured content found, fall back to all text
+        if not content_parts and hasattr(main_content, "get_text"):
+            content_parts = [main_content.get_text(separator="\n", strip=True)]
+
+        content = "\n\n".join(content_parts)
+
+        # Clean up excessive whitespace
+        content = re.sub(r"\n\s*\n\s*\n", "\n\n", content)
+        content = re.sub(r"[ \t]+", " ", content)
+
+        # Truncate if too long
+        if len(content) > max_length:
+            content = (
+                content[:max_length] + "\n\n[Content truncated due to length limit]"
+            )
+
+        return content
+
+    def _extract_links(
+        self, soup: BeautifulSoup, base_url: str
+    ) -> List[Dict[str, str]]:
+        """Extract links from the webpage."""
+        links = []
+
+        for link in soup.find_all("a", href=True):
+            if not isinstance(link, Tag):
+                continue
+
+            href_attr = link.get("href")
+            if not isinstance(href_attr, str):
+                continue
+
+            href = href_attr.strip()
+            text = link.get_text(strip=True)
+
+            if href and not href.startswith(("#", "javascript:", "mailto:")):
+                # Convert relative URLs to absolute
+                if href.startswith("//"):
+                    href = "https:" + href
+                elif href.startswith("/"):
+                    from urllib.parse import urljoin
+
+                    href = urljoin(base_url, href)
+                elif not href.startswith(("http://", "https://")):
+                    from urllib.parse import urljoin
+
+                    href = urljoin(base_url, href)
+
+                links.append(
+                    {
+                        "url": href,
+                        "text": text or href,
+                    }
+                )
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_links = []
+        for link_dict in links:
+            if link_dict["url"] not in seen:
+                seen.add(link_dict["url"])
+                unique_links.append(link_dict)
+
+        return unique_links[:50]  # Limit to first 50 links
+
+    def _extract_images(
+        self, soup: BeautifulSoup, base_url: str
+    ) -> List[Dict[str, str]]:
+        """Extract image information from the webpage."""
+        images = []
+
+        for img in soup.find_all("img"):
+            if not isinstance(img, Tag):
+                continue
+
+            src_attr = img.get("src", "")
+            alt_attr = img.get("alt", "")
+            title_attr = img.get("title", "")
+
+            src = src_attr.strip() if isinstance(src_attr, str) else ""
+            alt = alt_attr.strip() if isinstance(alt_attr, str) else ""
+            title = title_attr.strip() if isinstance(title_attr, str) else ""
+
+            if src:
+                # Convert relative URLs to absolute
+                if src.startswith("//"):
+                    src = "https:" + src
+                elif src.startswith("/"):
+                    from urllib.parse import urljoin
+
+                    src = urljoin(base_url, src)
+                elif not src.startswith(("http://", "https://", "data:")):
+                    from urllib.parse import urljoin
+
+                    src = urljoin(base_url, src)
+
+                images.append(
+                    {
+                        "src": src,
+                        "alt": alt,
+                        "title": title,
+                    }
+                )
+
+        return images[:20]  # Limit to first 20 images
+
+    def _generate_markdown(
+        self,
+        metadata: Dict[str, str],
+        content: str,
+        links: List[Dict[str, str]],
+        images: List[Dict[str, str]],
+        params: FetchWebpageParams,
+    ) -> str:
+        """Generate LLM-friendly markdown from extracted data."""
+        markdown_parts: List[str] = []
+
+        self._add_metadata_section(markdown_parts, metadata, params)
+        self._add_content_section(markdown_parts, content)
+        self._add_links_section(markdown_parts, links, params)
+        self._add_images_section(markdown_parts, images, params)
+
+        return "\n".join(markdown_parts)
+
+    def _add_metadata_section(
+        self,
+        markdown_parts: List[str],
+        metadata: Dict[str, str],
+        params: FetchWebpageParams,
+    ) -> None:
+        """Add metadata section to markdown parts."""
+        if not (params.include_metadata and metadata):
+            return
+
+        markdown_parts.append("## Page Metadata")
+        if "title" in metadata:
+            markdown_parts.append(f"**Title:** {metadata['title']}")
+        if "description" in metadata:
+            markdown_parts.append(f"**Description:** {metadata['description']}")
+        if "author" in metadata:
+            markdown_parts.append(f"**Author:** {metadata['author']}")
+        if "keywords" in metadata:
+            markdown_parts.append(f"**Keywords:** {metadata['keywords']}")
+        markdown_parts.append("")
+
+    def _add_content_section(self, markdown_parts: List[str], content: str) -> None:
+        """Add main content section to markdown parts."""
+        if content:
+            markdown_parts.append("## Main Content")
+            markdown_parts.append(content)
+            markdown_parts.append("")
+
+    def _add_links_section(
+        self,
+        markdown_parts: List[str],
+        links: List[Dict[str, str]],
+        params: FetchWebpageParams,
+    ) -> None:
+        """Add links section to markdown parts."""
+        if not (params.include_links and links):
+            return
+
+        markdown_parts.append("## Links Found")
+        for link in links[:20]:  # Limit display
+            if link["text"] != link["url"]:
+                markdown_parts.append(f"- [{link['text']}]({link['url']})")
+            else:
+                markdown_parts.append(f"- {link['url']}")
+        if len(links) > 20:
+            markdown_parts.append(f"... and {len(links) - 20} more links")
+        markdown_parts.append("")
+
+    def _add_images_section(
+        self,
+        markdown_parts: List[str],
+        images: List[Dict[str, str]],
+        params: FetchWebpageParams,
+    ) -> None:
+        """Add images section to markdown parts."""
+        if not (params.include_images and images):
+            return
+
+        markdown_parts.append("## Images Found")
+        for img in images:
+            if img["alt"]:
+                markdown_parts.append(f"- ![{img['alt']}]({img['src']}) - {img['alt']}")
+            else:
+                markdown_parts.append(f"- ![Image]({img['src']})")
+        markdown_parts.append("")

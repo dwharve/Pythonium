@@ -49,7 +49,17 @@ class TestExecuteCommandTool:
 
         context = ToolContext()
 
-        result = await tool.execute({"command": "echo 'Hello world'"}, context)
+        # Use platform-neutral command
+        import sys
+
+        if sys.platform == "win32":
+            command = "cmd"
+            args = ["/c", "echo", "Hello world"]
+            params = {"command": command, "args": args}
+        else:
+            params = {"command": "echo 'Hello world'"}
+
+        result = await tool.execute(params, context)
 
         assert result.success
         assert "Hello world" in str(result.data)
@@ -91,7 +101,19 @@ class TestExecuteCommandTool:
 
         context = ToolContext()
 
-        result = await tool.execute({"command": "sleep 1", "timeout": 5}, context)
+        # Use platform-neutral sleep command
+        import sys
+
+        if sys.platform == "win32":
+            command = "timeout"
+            args = ["/T", "1"]  # Windows timeout command
+        else:
+            command = "sleep"
+            args = ["1"]
+
+        result = await tool.execute(
+            {"command": command, "args": args, "timeout": 5}, context
+        )
 
         assert result is not None
 
@@ -103,7 +125,18 @@ class TestExecuteCommandTool:
         # Mock subprocess result
         mock_result = Mock()
         mock_result.returncode = 0
-        mock_result.stdout = "/tmp"
+
+        # Use platform-neutral working directory result
+        import os
+        import sys
+
+        if sys.platform == "win32":
+            expected_dir = "C:\\test"
+            mock_result.stdout = expected_dir
+        else:
+            expected_dir = "/tmp"
+            mock_result.stdout = expected_dir
+
         mock_result.stderr = ""
         mock_run.return_value = mock_result
 
@@ -111,8 +144,16 @@ class TestExecuteCommandTool:
 
         context = ToolContext()
 
+        # Use platform-specific command for getting current directory
+        import sys
+
+        if sys.platform == "win32":
+            cmd = "cd"
+        else:
+            cmd = "pwd"
+
         result = await tool.execute(
-            {"command": "pwd", "working_directory": "/tmp"}, context
+            {"command": cmd, "working_directory": expected_dir}, context
         )
 
         assert result is not None
@@ -142,8 +183,16 @@ class TestExecuteCommandTool:
 
         context = ToolContext()
 
+        # Platform-specific command to echo environment variable
+        import sys
+
+        if sys.platform == "win32":
+            cmd = "echo %TEST_VAR%"
+        else:
+            cmd = "echo $TEST_VAR"
+
         result = await tool.execute(
-            {"command": "echo $TEST_VAR", "environment": {"TEST_VAR": "test_value"}},
+            {"command": cmd, "environment": {"TEST_VAR": "test_value"}, "shell": True},
             context,
         )
 

@@ -93,17 +93,16 @@ class TestMainCommand:
         """Test that main function sets up context correctly."""
         runner = CliRunner()
         # Test with serve subcommand to ensure main context is set up
-        with patch("pythonium.main.PythoniumMCPServer") as mock_server, patch(
-            "asyncio.run"
-        ) as mock_run:
+        with patch("pythonium.main.PythoniumMCPServer") as mock_server:
             # Mock server to avoid actual startup
             mock_server_instance = Mock()
             mock_server.return_value = mock_server_instance
 
             result = runner.invoke(main, ["--verbose", "--log-level", "DEBUG", "serve"])
 
-            # Verify asyncio.run was called
-            mock_run.assert_called_once()
+            # Verify server was created and run_stdio was called (default transport is stdio)
+            mock_server.assert_called_once()
+            mock_server_instance.run_stdio.assert_called_once()
 
             # Should exit cleanly or with expected error, not crash on setup
             assert result.exit_code in [0, 1]  # 1 is OK if server fails to start
@@ -114,9 +113,7 @@ class TestServeCommand:
 
     def test_serve_command_basic(self):
         """Test basic serve command."""
-        with patch("pythonium.main.PythoniumMCPServer") as mock_server_class, patch(
-            "asyncio.run"
-        ) as mock_asyncio_run:
+        with patch("pythonium.main.PythoniumMCPServer") as mock_server_class:
 
             mock_server = Mock()
             mock_server_class.return_value = mock_server
@@ -126,7 +123,8 @@ class TestServeCommand:
 
             assert result.exit_code == 0
             mock_server_class.assert_called_once()
-            mock_asyncio_run.assert_called_once()
+            # Default transport is stdio, so run_stdio should be called
+            mock_server.run_stdio.assert_called_once()
 
     def test_serve_command_with_transport(self):
         """Test serve command with different transport."""
@@ -335,8 +333,6 @@ class TestMainIntegration:
     def test_end_to_end_serve(self):
         """Test end-to-end serve command execution."""
         with patch("pythonium.main.PythoniumMCPServer") as mock_server_class, patch(
-            "asyncio.run"
-        ) as mock_asyncio_run, patch(
             "pythonium.main.setup_logging"
         ) as mock_setup_logging:
 
@@ -350,7 +346,8 @@ class TestMainIntegration:
             # Should have set up logging and created server
             assert mock_setup_logging.call_count >= 1
             mock_server_class.assert_called_once()
-            mock_asyncio_run.assert_called_once()
+            # For stdio transport, run_stdio should be called
+            mock_server.run_stdio.assert_called_once()
 
     def test_error_handling_in_serve(self):
         """Test error handling in serve command."""

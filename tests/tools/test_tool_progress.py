@@ -155,12 +155,23 @@ class TestToolProgressNotifications:
         context = ToolContext()
         context.progress_callback = progress_callback
 
+        # Use platform-independent command
+        import sys
+
+        if sys.platform == "win32":
+            command = "cmd"
+            args = ["/c", "echo", "Hello World"]
+        else:
+            command = "echo"
+            args = ["Hello", "World"]
+
         # Test parameters as dict (required by validation decorator)
         params = {
-            "command": "echo",
-            "args": ["Hello", "World"],
+            "command": command,
+            "args": args,
             "timeout": 10,
             "capture_output": True,
+            "shell": True,  # Use shell for better Windows compatibility
         }
 
         # Execute the tool

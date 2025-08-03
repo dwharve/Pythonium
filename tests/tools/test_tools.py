@@ -107,7 +107,7 @@ class TestFilesystemTools:
         test_file = temp_dir / "test.txt"
 
         # Test basic file creation with empty content
-        result = await tool.run({"path": test_file, "content": ""}, tool_context)
+        result = await tool.run({"path": str(test_file), "content": ""}, tool_context)
 
         assert result.success
         assert test_file.exists()
@@ -121,15 +121,15 @@ class TestFilesystemTools:
         content = "Hello, World!\nThis is a test file."
 
         result = await tool.run(
-            {"path": test_file, "content": content, "overwrite": True},
+            {"path": str(test_file), "content": content, "mode": "write"},
             tool_context,
         )
 
         assert result.success
         assert test_file.exists()
         assert test_file.read_text() == content
-        assert result.metadata["lines"] == 2
-        assert result.metadata["characters"] == len(content)
+        assert result.data["lines"] == 2
+        assert result.data["characters"] == len(content)
 
     @pytest.mark.asyncio
     async def test_read_file_tool(self, temp_dir, tool_context):
@@ -140,12 +140,12 @@ class TestFilesystemTools:
         test_file.write_text(content)
 
         tool = ReadFileTool()
-        result = await tool.run({"path": test_file}, tool_context)
+        result = await tool.run({"path": str(test_file)}, tool_context)
 
         assert result.success
         assert result.data["content"] == content
         assert result.data["path"] == str(test_file)
-        assert result.metadata["lines"] == 2
+        assert result.data["total_lines"] == 2
         assert result.metadata["characters"] == len(content)
 
     @pytest.mark.asyncio
@@ -156,7 +156,7 @@ class TestFilesystemTools:
         test_file.write_text("Test content")
 
         tool = DeleteFileTool()
-        result = await tool.run({"path": test_file}, tool_context)
+        result = await tool.run({"path": str(test_file)}, tool_context)
 
         assert result.success
         assert not test_file.exists()
@@ -173,7 +173,7 @@ class TestFilesystemTools:
 
         tool = FindFilesTool()
         result = await tool.run(
-            {"path": temp_dir, "name_pattern": "*.txt", "file_type": "file"},
+            {"path": str(temp_dir), "name_pattern": "*.txt", "file_type": "file"},
             tool_context,
         )
 
@@ -194,7 +194,7 @@ class TestFilesystemTools:
         tool = SearchFilesTool()
         result = await tool.run(
             {
-                "path": temp_dir,
+                "path": str(temp_dir),
                 "pattern": "Hello",
                 "include_line_numbers": True,
             },
@@ -222,7 +222,9 @@ class TestToolIntegration:
         create_tool = WriteFileTool()
         test_file = temp_dir / "workflow_test.txt"
 
-        result = await create_tool.run({"path": test_file, "content": ""}, tool_context)
+        result = await create_tool.run(
+            {"path": str(test_file), "content": ""}, tool_context
+        )
         assert result.success
 
         # Step 2: Write content
@@ -230,21 +232,21 @@ class TestToolIntegration:
         content = "Initial content\nLine 2\nLine 3"
 
         result = await write_tool.run(
-            {"path": test_file, "content": content, "overwrite": True},
+            {"path": str(test_file), "content": content, "mode": "write"},
             tool_context,
         )
         assert result.success
 
         # Step 3: Read and verify
         read_tool = ReadFileTool()
-        result = await read_tool.run({"path": test_file}, tool_context)
+        result = await read_tool.run({"path": str(test_file)}, tool_context)
         assert result.success
         assert result.data["content"] == content
 
         # Step 4: Search for content
         search_tool = SearchFilesTool()
         result = await search_tool.run(
-            {"path": temp_dir, "pattern": "Line 2", "file_pattern": "*.txt"},
+            {"path": str(temp_dir), "pattern": "Line 2", "file_pattern": "*.txt"},
             tool_context,
         )
         assert result.success
@@ -252,7 +254,7 @@ class TestToolIntegration:
 
         # Step 5: Delete file
         delete_tool = DeleteFileTool()
-        result = await delete_tool.run({"path": test_file}, tool_context)
+        result = await delete_tool.run({"path": str(test_file)}, tool_context)
         assert result.success
         assert not test_file.exists()
 

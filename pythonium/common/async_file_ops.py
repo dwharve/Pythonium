@@ -110,7 +110,7 @@ class AsyncFileService:
 
             # Write content to file
             mode = "a" if append else "w"
-            async with aiofiles.open(str(file_path), mode=mode, encoding=encoding) as f:  # type: ignore[call-overload]
+            async with aiofiles.open(str(file_path), mode=mode, encoding=encoding) as f:
                 await f.write(content)
 
             # Get file info

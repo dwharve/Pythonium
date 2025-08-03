@@ -5,6 +5,7 @@ MCP server implementation using the official MCP SDK.
 import asyncio
 import logging
 import signal
+import sys
 from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
@@ -45,7 +46,7 @@ class PythoniumMCPServer:
         # Create FastMCP server
         self.mcp_server = FastMCP(
             name=self.config.server.name,
-            description=self.config.server.description,
+            instructions=self.config.server.description,
         )
 
         # Tool management
@@ -56,6 +57,7 @@ class PythoniumMCPServer:
         self._running = False
         self._shutdown_event = asyncio.Event()
         self._registered_tools: Dict[str, BaseTool] = {}
+        self._shutdown_count = 0  # Track multiple shutdown attempts
 
         # Setup logging
         self._setup_logging()
@@ -107,6 +109,35 @@ class PythoniumMCPServer:
 
         logger.info("Pythonium MCP server stopped")
 
+    def run_stdio(self) -> None:
+        """
+        Run the server with stdio transport.
+
+        This is a synchronous method that lets FastMCP manage the asyncio event loop.
+        """
+
+        # Initialize the server synchronously
+        async def init_server():
+            await self.start()
+
+        # Run initialization
+        asyncio.run(init_server())
+
+        try:
+            logger.info("Starting FastMCP in stdio mode...")
+            # Let FastMCP handle the event loop for stdio
+            self.mcp_server.run(transport="stdio")
+        except KeyboardInterrupt:
+            logger.info("Received keyboard interrupt")
+        except Exception as e:
+            logger.error(f"Server error: {e}")
+        finally:
+            # Cleanup
+            async def cleanup():
+                await self.stop()
+
+            asyncio.run(cleanup())
+
     async def run(self) -> None:
         """
         Run the server until shutdown.
@@ -116,32 +147,74 @@ class PythoniumMCPServer:
         await self.start()
 
         try:
-            # Determine transport type and run accordingly
             transport_type = self.config.server.transport.value.lower()
 
-            def run_mcp_server(transport_type):
-                """Run MCP server with specified transport."""
-                if transport_type == "stdio":
-                    # For stdio, we use the FastMCP's built-in run method
-                    self.mcp_server.run(transport="stdio")
-                elif transport_type == "http":
-                    # For HTTP, we use streamable-http transport
-                    self.mcp_server.run(transport="streamable-http")
-                elif transport_type == "websocket":
-                    # WebSocket transport (using SSE for now)
-                    self.mcp_server.run(transport="sse")
-                else:
-                    raise ServerError(f"Unsupported transport type: {transport_type}")
-
-            # Run the MCP server in the current event loop's thread pool
-            await asyncio.get_event_loop().run_in_executor(
-                None, run_mcp_server, transport_type
-            )
+            if transport_type == "stdio":
+                await self._run_stdio_transport()
+            else:
+                await self._run_network_transport(transport_type)
 
         except KeyboardInterrupt:
             logger.info("Received keyboard interrupt")
+        except Exception as e:
+            logger.error(f"Server error: {e}")
         finally:
             await self.stop()
+
+    async def _run_stdio_transport(self) -> None:
+        """Run server with stdio transport."""
+        try:
+            # Run FastMCP server in stdio mode - this will block until interrupted
+            self.mcp_server.run(transport="stdio")
+        except KeyboardInterrupt:
+            logger.info("Received keyboard interrupt in FastMCP")
+        except Exception as e:
+            logger.error(f"FastMCP error: {e}")
+
+    async def _run_network_transport(self, transport_type: str) -> None:
+        """Run server with network transport (HTTP/WebSocket)."""
+
+        def run_mcp_server():
+            if transport_type == "http":
+                self.mcp_server.run(transport="streamable-http")
+            elif transport_type == "websocket":
+                self.mcp_server.run(transport="sse")
+            else:
+                raise ServerError(f"Unsupported transport type: {transport_type}")
+
+        # Create a task to run the MCP server
+        server_task: asyncio.Task[None] = asyncio.create_task(
+            asyncio.get_event_loop().run_in_executor(None, run_mcp_server)  # type: ignore[arg-type]
+        )
+
+        # Wait for either the server task to complete or shutdown signal
+        shutdown_task = asyncio.create_task(self._shutdown_event.wait())
+
+        try:
+            await self._wait_for_completion(server_task, shutdown_task)
+        except asyncio.CancelledError:
+            logger.info("Server run cancelled")
+            await self._cancel_task(server_task)
+
+    async def _wait_for_completion(self, server_task, shutdown_task) -> None:
+        """Wait for either server completion or shutdown signal."""
+        done, pending = await asyncio.wait(
+            [server_task, shutdown_task],
+            return_when=asyncio.FIRST_COMPLETED,
+            timeout=None,
+        )
+
+        # Cancel any pending tasks
+        for task in pending:
+            await self._cancel_task(task)
+
+    async def _cancel_task(self, task) -> None:
+        """Cancel a task with timeout."""
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout=2.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
 
     async def run_forever(self) -> None:
         """Run the server forever (until interrupted)."""
@@ -373,10 +446,15 @@ class PythoniumMCPServer:
 
     def _signal_handler(self, signum, _frame) -> None:
         """Handle shutdown signals."""
-        logger.info(f"Received signal {signum}, initiating shutdown...")
+        self._shutdown_count += 1
 
-        # Create a task to stop the server
-        asyncio.create_task(self.stop())
+        if self._shutdown_count == 1:
+            logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+            # Create a task to stop the server
+            asyncio.create_task(self.stop())
+        elif self._shutdown_count >= 2:
+            logger.warning("Force shutdown requested, exiting immediately...")
+            sys.exit(1)
 
     def get_server_info(self) -> Dict[str, Any]:
         """Get server information."""

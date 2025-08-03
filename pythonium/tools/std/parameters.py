@@ -1,10 +1,9 @@
 """
 Parameter models for standard tools.
 
-This module provides parameter validation models for tools in the std module.
+This module provides clean, modern parameter validation models.
 """
 
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
 
@@ -97,6 +96,18 @@ class ExecuteCommandParams(ParameterModel):
         return v
 
 
+class ExecutePythonParams(ParameterModel):
+    """Parameter model for ExecutePythonTool."""
+
+    code: str = Field(..., description="Python code to execute")
+    working_directory: Optional[str] = Field(None, description="Working directory")
+    timeout: int = Field(30, description="Execution timeout", ge=1, le=300)
+    capture_output: bool = Field(True, description="Capture output")
+    environment: Optional[Dict[str, str]] = Field(
+        None, description="Environment variables"
+    )
+
+
 class SearchToolsParams(ParameterModel):
     """Parameter model for SearchToolsTool."""
 
@@ -134,69 +145,115 @@ class SearchToolsParams(ParameterModel):
 
 
 class ReadFileParams(ParameterModel):
-    """Parameter model for ReadFileTool."""
+    """Parameter model for ReadFileTool with flexible line selection."""
 
-    path: Union[str, Path] = Field(..., description="Path to the file to read")
-    encoding: str = Field("utf-8", description="Text encoding of the file")
-    max_size: int = Field(
-        10485760, description="Maximum file size to read in bytes", ge=1
-    )  # 10MB default
+    path: str = Field(..., description="Path to the file to read")
+    encoding: str = Field("utf-8", description="Text encoding")
+    max_size: int = Field(10485760, description="Maximum file size in bytes", ge=1)
+
+    # Line selection (mutually exclusive)
+    start_line: Optional[int] = Field(None, description="Start line (1-indexed)", ge=1)
+    end_line: Optional[int] = Field(None, description="End line (1-indexed)", ge=1)
+    line_numbers: Optional[List[int]] = Field(None, description="Specific line numbers")
+    line_pattern: Optional[str] = Field(
+        None, description="Regex pattern to match lines"
+    )
+    head_lines: Optional[int] = Field(None, description="First N lines", ge=1)
+    tail_lines: Optional[int] = Field(None, description="Last N lines", ge=1)
+
+    # Output options
+    include_line_numbers: bool = Field(False, description="Include line numbers")
+    strip_whitespace: bool = Field(False, description="Strip line whitespace")
 
     @field_validator("path")
     @classmethod
-    def validate_path(cls, v: Union[str, Path]) -> str:
-        """Validate path format."""
-        if not v:
+    def validate_path(cls, v: str) -> str:
+        """Validate path is not empty."""
+        if not v or not v.strip():
             raise ValueError("Path cannot be empty")
-        return str(v)  # Convert Path to string
+        return v.strip()
+
+    def model_post_init(self, __context: Any) -> None:
+        """Ensure only one line selection method is used."""
+        selections = [
+            self.start_line is not None or self.end_line is not None,
+            self.line_numbers is not None,
+            self.line_pattern is not None,
+            self.head_lines is not None,
+            self.tail_lines is not None,
+        ]
+
+        if sum(selections) > 1:
+            raise ValueError("Use only one line selection method at a time")
 
 
 class WriteFileParams(ParameterModel):
-    """Parameter model for WriteFileTool (unified create/write functionality)."""
+    """Parameter model for WriteFileTool with multiple write modes."""
 
-    path: Union[str, Path] = Field(
-        ..., description="Path where the file will be written"
-    )
-    content: str = Field(
-        "", description="Content to write to the file (empty for empty file)"
-    )
+    path: str = Field(..., description="Path to write file")
+    content: str = Field("", description="Content to write")
     encoding: str = Field("utf-8", description="File encoding")
-    append: bool = Field(False, description="Append to file instead of overwriting")
-    overwrite: bool = Field(True, description="Overwrite file if it exists")
-    create_dirs: bool = Field(
-        True, description="Create parent directories if they don't exist"
+    mode: str = Field(
+        "write", description="Write mode: write, append, prepend, insert, replace"
     )
+
+    # Mode-specific options
+    insert_at_line: Optional[int] = Field(
+        None, description="Line number for insert mode", ge=1
+    )
+    replace_pattern: Optional[str] = Field(
+        None, description="Regex pattern for replace mode"
+    )
+    replace_all: bool = Field(False, description="Replace all occurrences")
+
+    # File options
+    create_dirs: bool = Field(True, description="Create parent directories")
+    backup: bool = Field(False, description="Create backup before modification")
 
     @field_validator("path")
     @classmethod
-    def validate_path(cls, v: Union[str, Path]) -> str:
-        """Validate path format."""
-        if not v:
+    def validate_path(cls, v: str) -> str:
+        """Validate path is not empty."""
+        if not v or not v.strip():
             raise ValueError("Path cannot be empty")
-        return str(v)  # Convert Path to string
+        return v.strip()
+
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, v: str) -> str:
+        """Validate write mode."""
+        valid_modes = ["write", "append", "prepend", "insert", "replace"]
+        if v not in valid_modes:
+            raise ValueError(f"Invalid mode: {v}. Use: {', '.join(valid_modes)}")
+        return v
+
+    def model_post_init(self, __context: Any) -> None:
+        """Validate mode requirements."""
+        if self.mode == "insert" and self.insert_at_line is None:
+            raise ValueError("insert_at_line required for insert mode")
+        if self.mode == "replace" and self.replace_pattern is None:
+            raise ValueError("replace_pattern required for replace mode")
 
 
 class DeleteFileParams(ParameterModel):
     """Parameter model for DeleteFileTool."""
 
-    path: Union[str, Path] = Field(..., description="Path to the file to delete")
+    path: str = Field(..., description="Path to the file to delete")
     force: bool = Field(False, description="Force deletion even if file is read-only")
 
     @field_validator("path")
     @classmethod
-    def validate_path(cls, v: Union[str, Path]) -> str:
+    def validate_path(cls, v: str) -> str:
         """Validate path format."""
-        if not v:
+        if not v or not v.strip():
             raise ValueError("Path cannot be empty")
-        return str(v)  # Convert Path to string
+        return v.strip()
 
 
 class FindFilesParams(ParameterModel):
     """Parameter model for FindFilesTool."""
 
-    path: Union[str, Path] = Field(
-        ..., description="Root directory path to start searching from"
-    )
+    path: str = Field(..., description="Root directory path to start searching from")
     name_pattern: Optional[str] = Field(
         None, description="Glob pattern to match filenames (e.g., '*.py', 'test_*')"
     )
@@ -221,7 +278,7 @@ class FindFilesParams(ParameterModel):
 
     @field_validator("path")
     @classmethod
-    def validate_path(cls, v: Union[str, Path]) -> str:
+    def validate_path(cls, v: str) -> str:
         """Validate path format."""
         if not v:
             raise ValueError("Path cannot be empty")
@@ -239,9 +296,7 @@ class FindFilesParams(ParameterModel):
 class SearchTextParams(ParameterModel):
     """Parameter model for SearchFilesTool."""
 
-    path: Union[str, Path] = Field(
-        ..., description="Root directory path to search within"
-    )
+    path: str = Field(..., description="Root directory path to search within")
     pattern: str = Field(..., description="Text pattern or code snippet to search for")
     regex: bool = Field(False, description="Treat pattern as a regular expression")
     case_sensitive: bool = Field(True, description="Case sensitive search")
@@ -260,7 +315,7 @@ class SearchTextParams(ParameterModel):
 
     @field_validator("path")
     @classmethod
-    def validate_path(cls, v: Union[str, Path]) -> str:
+    def validate_path(cls, v: str) -> str:
         """Validate path format."""
         if not v:
             raise ValueError("Path cannot be empty")
@@ -417,5 +472,46 @@ class HttpRequestParams(ParameterModel):
             for name, value in v.items():
                 if not isinstance(name, str) or not isinstance(value, str):
                     raise ValueError("Parameter names and values must be strings")
+
+        return v
+
+
+class FetchWebpageParams(ParameterModel):
+    """Parameter model for fetching and converting webpages to LLM-friendly markup."""
+
+    url: str = Field(..., description="URL of the webpage to fetch")
+    timeout: int = Field(30, description="Request timeout in seconds", ge=1, le=300)
+    max_content_length: int = Field(
+        50000, description="Maximum content length to process", ge=1000, le=500000
+    )
+    include_links: bool = Field(
+        True, description="Include extracted links in the output"
+    )
+    include_images: bool = Field(
+        True, description="Include image descriptions and alt text"
+    )
+    include_metadata: bool = Field(
+        True, description="Include page metadata (title, description, etc.)"
+    )
+    user_agent: Optional[str] = Field(
+        None, description="Custom User-Agent header for the request"
+    )
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        """Validate URL format."""
+        if not v or not v.strip():
+            raise ValueError("URL cannot be empty")
+
+        v = v.strip()
+        parsed = urlparse(v)
+        if not parsed.scheme or not parsed.netloc:
+            raise ValueError(
+                "Invalid URL format - must include scheme (http/https) and domain"
+            )
+
+        if parsed.scheme not in ["http", "https"]:
+            raise ValueError("URL scheme must be http or https")
 
         return v
