@@ -300,6 +300,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Status**: Production-ready Beta - Core functionality stable, comprehensive test coverage, active development
 
-**Current Version**: 0.1.4  
+**Current Version**: 0.1.5  
 **Last Updated**: July 6, 2025  
 **Maintainer**: David Harvey
